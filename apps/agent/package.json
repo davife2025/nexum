@@ -1,0 +1,23 @@
+{
+  "name": "@nexum/agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Nexum autonomous agent — agentic commerce on Kite",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "run:task": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@nexum/kite": "*",
+    "@nexum/x402": "*",
+    "@nexum/types": "*",
+    "ethers": "^6.13.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

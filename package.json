@@ -1,0 +1,39 @@
+{
+  "name": "nexum",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Autonomous AI agents for agentic commerce on Kite chain",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "clean": "turbo clean",
+    "dev:web": "turbo dev --filter=@nexum/web",
+    "dev:agent": "turbo dev --filter=@nexum/agent",
+    "agent:run": "npm run dev --workspace=apps/agent"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "npm@10.0.0",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davife2025/nexum.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/davife2025/nexum/issues"
+  },
+  "homepage": "https://github.com/davife2025/nexum#readme"
+}

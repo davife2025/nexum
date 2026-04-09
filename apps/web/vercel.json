@@ -1,0 +1,10 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && npx turbo build --filter=@nexum/web",
+  "installCommand": "cd ../.. && npm install",
+  "functions": {
+    "app/api/agent/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

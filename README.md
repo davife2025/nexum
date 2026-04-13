@@ -251,18 +251,7 @@ x402 protocol handler:
 - `settleViaFacilitator(xPayment)` — settle via Pieverse on Kite chain
 - `executeX402Flow(wallet, url, params)` — full end-to-end helper
 
----
 
-## Judging Criteria
-
-| Criterion | Implementation |
-|---|---|
-| **Agent Autonomy** | Zero human steps after task submission. Wallet management, 402 handling, payment signing, settlement, and AI synthesis all autonomous. |
-| **Developer Experience** | 3-command setup. Turborepo monorepo. Shared typed packages. ⌘K search. CSV export. Full README. CLI + web interfaces. |
-| **Real-World Applicability** | Pattern applies directly to any agentic marketplace: data APIs, AI inference, compute, identity, storage. Deployed on Vercel with live Kite testnet integration. |
-| **Novel / Creative** | x402 payments + programmable spend policy + multi-service discovery + cryptographic attestations + full-text search + CSV export — all in a single monorepo with a production-quality UI. |
-
----
 
 ## Resources
 

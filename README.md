@@ -3,9 +3,6 @@
 > Autonomous AI agents that discover services, execute x402 USDC payments, enforce programmable spend policy, and settle every action on Kite — the first AI payment blockchain.
 
 **Hackathon Track:** Agentic Commerce · Supported by Kite AI
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/nexum&env=ANTHROPIC_API_KEY,AGENT_PRIVATE_KEY&root-directory=apps/web)
-
 ---
 
 ## What Is Nexum?

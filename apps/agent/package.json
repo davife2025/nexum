@@ -4,10 +4,10 @@
   "private": true,
   "description": "Nexum autonomous agent — agentic commerce on Kite",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=../../.env.local src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "run:task": "tsx src/index.ts"
+    "run:task": "tsx --env-file=../../.env.local src/index.ts"
   },
   "dependencies": {
     "@nexum/kite": "*",

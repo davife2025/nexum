@@ -1,0 +1,61 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#0F172A"/>
+
+  <!-- Grid pattern -->
+  <defs>
+    <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse">
+      <path d="M 44 0 L 0 0 0 44" fill="none" stroke="rgba(0,229,201,0.06)" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- Glow blob -->
+  <ellipse cx="200" cy="315" rx="300" ry="200" fill="rgba(0,229,201,0.05)"/>
+  <ellipse cx="1000" cy="315" rx="200" ry="300" fill="rgba(123,94,255,0.05)"/>
+
+  <!-- Logo mark -->
+  <g transform="translate(100,100)">
+    <rect x="0" y="0" width="48" height="48" rx="4" fill="rgba(0,229,201,0.1)" stroke="rgba(0,229,201,0.5)" stroke-width="1.5" transform="rotate(45,24,24)"/>
+    <circle cx="24" cy="24" r="6" fill="#00E5C9"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="170" y="136" font-family="'Space Grotesk',system-ui,sans-serif" font-size="52" font-weight="700" fill="#F8FAFC" letter-spacing="-1">nexum</text>
+
+  <!-- Tagline -->
+  <text x="100" y="210" font-family="'IBM Plex Mono',monospace" font-size="18" fill="#4A7090" letter-spacing="2">AGENTIC COMMERCE · KITE CHAIN</text>
+
+  <!-- Main headline -->
+  <text x="100" y="320" font-family="'Space Grotesk',system-ui,sans-serif" font-size="56" font-weight="700" fill="#F8FAFC">Autonomous Agents That</text>
+  <text x="100" y="390" font-family="'Space Grotesk',system-ui,sans-serif" font-size="56" font-weight="700" fill="#00E5C9">Buy What They Need</text>
+
+  <!-- Descriptor -->
+  <text x="100" y="460" font-family="'Plus Jakarta Sans',system-ui,sans-serif" font-size="22" fill="#4A7090">Service discovery · x402 payments · On-chain attestations</text>
+
+  <!-- Chain badge -->
+  <rect x="100" y="505" width="220" height="40" rx="8" fill="rgba(0,229,201,0.1)" stroke="rgba(0,229,201,0.3)" stroke-width="1"/>
+  <circle cx="127" cy="525" r="5" fill="#00E5C9"/>
+  <text x="142" y="530" font-family="'IBM Plex Mono',monospace" font-size="14" fill="#00E5C9">KITE TESTNET · 2368</text>
+
+  <!-- Right side decoration: agent flow -->
+  <g transform="translate(800,140)" opacity="0.8">
+    <!-- Step boxes -->
+    <rect x="0" y="0" width="140" height="44" rx="8" fill="rgba(0,229,201,0.1)" stroke="rgba(0,229,201,0.3)" stroke-width="1"/>
+    <text x="16" y="27" font-family="'IBM Plex Mono',monospace" font-size="13" fill="#00E5C9">◎  Discover</text>
+
+    <rect x="0" y="70" width="140" height="44" rx="8" fill="rgba(255,179,0,0.1)" stroke="rgba(255,179,0,0.3)" stroke-width="1"/>
+    <text x="16" y="97" font-family="'IBM Plex Mono',monospace" font-size="13" fill="#FFB300">⚡  Pay (x402)</text>
+
+    <rect x="0" y="140" width="140" height="44" rx="8" fill="rgba(123,94,255,0.1)" stroke="rgba(123,94,255,0.3)" stroke-width="1"/>
+    <text x="16" y="167" font-family="'IBM Plex Mono',monospace" font-size="13" fill="#7B5EFF">✦  Execute</text>
+
+    <rect x="0" y="210" width="140" height="44" rx="8" fill="rgba(123,94,255,0.1)" stroke="rgba(123,94,255,0.3)" stroke-width="1"/>
+    <text x="16" y="237" font-family="'IBM Plex Mono',monospace" font-size="13" fill="#7B5EFF">⛓  Settle</text>
+
+    <!-- Connectors -->
+    <line x1="70" y1="44" x2="70" y2="70" stroke="#1E3A5F" stroke-width="1" stroke-dasharray="3,3"/>
+    <line x1="70" y1="114" x2="70" y2="140" stroke="#1E3A5F" stroke-width="1" stroke-dasharray="3,3"/>
+    <line x1="70" y1="184" x2="70" y2="210" stroke="#1E3A5F" stroke-width="1" stroke-dasharray="3,3"/>
+  </g>
+</svg>

@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import Link from "next/link";
+import AppNav from "../components/AppNav";
+import RunsMonitor from "../components/RunsMonitor";
+import QuickTasks from "../components/QuickTasks";
+import ServiceStatusStrip from "../components/ServiceStatusStrip";
+import { useToast } from "../components/Toast";
 import type { AgentEvent, AgentStep, PaymentRecord, ServiceListing, Attestation } from "@nexum/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -87,13 +93,6 @@ const CATEGORY_COLOR: Record<string, string> = {
   other:    "text-[#4A7090]",
 };
 
-const EXAMPLE_TASKS = [
-  "Analyse weather patterns and their impact on DeFi liquidity pools in emerging markets",
-  "Research AI inference costs across chains and identify arbitrage opportunities",
-  "Verify identity credentials and assess agent reputation scores for a new protocol",
-  "Scout high-yield DeFi opportunities and cross-reference with real-time market conditions",
-  "Build a commerce intelligence report on autonomous agent transaction volumes on Kite",
-];
 
 const LOCATIONS = ["San Francisco", "Lagos", "Tokyo", "London", "Singapore", "Dubai"];
 
@@ -107,8 +106,16 @@ export default function NexumDashboard() {
   const [activeTab, setActiveTab] = useState<"trace" | "payments" | "services" | "report">("trace");
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { add: toast } = useToast();
 
-  const elapsed = run ? (run.completedAt ?? Date.now()) - run.startedAt : 0;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!isRunning) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isRunning]);
+
+  const elapsed = run ? ((run.completedAt ?? (isRunning ? now : Date.now())) - run.startedAt) : 0;
 
   useEffect(() => {
     if (run?.result && run.status === "complete") setActiveTab("report");
@@ -118,7 +125,29 @@ export default function NexumDashboard() {
     if (isRunning) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [run?.steps.length, isRunning]);
 
+  // Use a ref for toast so handleEvent doesn't need it as a dependency
+  const toastRef = useRef(toast);
+  useEffect(() => { toastRef.current = toast; }, [toast]);
+
   const handleEvent = useCallback((event: AgentEvent) => {
+    // Side-effects (toasts) — run outside setRun to avoid stale closure issues
+    if (event.type === "run_complete") {
+      const meta = event.meta as Record<string, string> | undefined;
+      toastRef.current({
+        kind: "success",
+        title: "Run complete",
+        body: `${meta?.paymentsCount ?? 0} payment${meta?.paymentsCount !== 1 ? "s" : ""} · ${meta?.attestationsCount ?? 0} attestations`,
+        href: meta?.attestationUrl,
+        duration: 7000,
+      });
+    }
+    if (event.type === "run_error") {
+      toastRef.current({ kind: "error", title: "Agent error", body: (event.error ?? "Unknown error").slice(0, 80), duration: 6000 });
+    }
+    if (event.type === "payment_complete" && event.payment) {
+      toastRef.current({ kind: "payment", title: `Paid ${event.payment.amountDisplay}`, body: event.payment.serviceName, duration: 4000 });
+    }
+
     setRun((prev) => {
       if (!prev) return prev;
       switch (event.type) {
@@ -191,37 +220,10 @@ export default function NexumDashboard() {
   return (
     <div className="min-h-screen grid-bg" style={{ background: "#0F172A" }}>
 
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-50 border-b border-[#1E3A5F] backdrop-blur-md" style={{ background: "rgba(10,37,64,0.85)" }}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3.5 flex items-center justify-between gap-4">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="relative w-8 h-8 flex-shrink-0">
-              <div className="absolute inset-0 rounded-sm rotate-45 border border-[rgba(0,229,201,0.5)]" style={{ background: "rgba(0,229,201,0.08)" }} />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[#00E5C9] text-xs font-bold leading-none" style={{ textShadow: "0 0 12px #00E5C9" }}>N</span>
-              </div>
-            </div>
-            <div>
-              <span className="font-display font-bold text-[#F8FAFC] text-base tracking-wide">nexum</span>
-              <span className="ml-2 text-[#4A7090] text-xs font-mono hidden sm:inline">/ agentic commerce</span>
-            </div>
-          </div>
 
-          {/* Status strip */}
-          <div className="flex items-center gap-4 text-xs font-mono text-[#4A7090]">
-            <span className="hidden md:flex items-center gap-1.5">
-              <span className="dot dot-teal" />KITE TESTNET
-            </span>
-            <span className="hidden lg:block">CHAIN 2368</span>
-            {run?.agentAddress && (
-              <a href={`https://testnet.kitescan.ai/address/${run.agentAddress}`} target="_blank" rel="noopener noreferrer"
-                className="text-[#00E5C9] hover:opacity-80 transition-opacity">{shortAddr(run.agentAddress)} ↗</a>
-            )}
-            <a href="https://testnet.kitescan.ai" target="_blank" rel="noopener noreferrer" className="hover:text-[#00E5C9] transition-colors">KITESCAN ↗</a>
-          </div>
-        </div>
-      </header>
+      {/* ── Header ── */}
+      <AppNav />
+
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
 
@@ -285,18 +287,10 @@ export default function NexumDashboard() {
               </button>
             </div>
 
-            {/* Example tasks */}
+            {/* Quick tasks */}
             {!run && (
               <div className="nx-panel p-4">
-                <div className="text-xs font-mono text-[#4A7090] tracking-widest mb-3">// EXAMPLE TASKS</div>
-                <div className="space-y-1">
-                  {EXAMPLE_TASKS.map((t) => (
-                    <button key={t} onClick={() => setTask(t)}
-                      className="w-full text-left text-xs font-sans text-[#4A7090] hover:text-[#B8D4E8] rounded-lg px-2 py-1.5 transition-all hover:bg-[rgba(0,229,201,0.04)] leading-relaxed">
-                      <span className="text-[#00E5C9] mr-1.5">→</span>{t}
-                    </button>
-                  ))}
-                </div>
+                <QuickTasks onSelect={(t, loc) => { setTask(t); setLocation(loc); }} />
               </div>
             )}
 
@@ -316,6 +310,26 @@ export default function NexumDashboard() {
                     <span className="text-xs font-mono font-semibold" style={{ color }}>{value}</span>
                   </div>
                 ))}
+
+                {/* Progress bar */}
+                {run.steps.length > 0 && (
+                  <div>
+                    <div style={{ background: "#0F172A", borderRadius: 4, height: 4, overflow: "hidden", marginTop: 4 }}>
+                      <div style={{
+                        height: "100%", borderRadius: 4,
+                        background: run.status === "complete" ? "#7B5EFF" : run.status === "error" ? "#FF4D6A" : "#00E5C9",
+                        width: `${Math.round((run.steps.filter(s => s.status === "success").length / Math.max(run.steps.length, 5)) * 100)}%`,
+                        transition: "width 0.5s ease",
+                        boxShadow: run.status === "running" ? "0 0 8px #00E5C9" : "none",
+                      }} />
+                    </div>
+                    <div className="text-xs font-mono mt-1" style={{ color: "#4A7090" }}>
+                      {run.status === "complete" ? "100% complete" :
+                       run.status === "error" ? "failed" :
+                       `${Math.round((run.steps.filter(s => s.status === "success").length / Math.max(run.steps.length, 5)) * 100)}%`}
+                    </div>
+                  </div>
+                )}
 
                 {run.attestationUrl && (
                   <a href={run.attestationUrl} target="_blank" rel="noopener noreferrer"
@@ -363,6 +377,9 @@ export default function NexumDashboard() {
                 ))}
               </div>
             </div>
+
+            {/* Service status */}
+            <ServiceStatusStrip />
           </div>
 
           {/* ── Main panel ── */}
@@ -614,11 +631,20 @@ export default function NexumDashboard() {
                               ))}
                             </div>
                             {run.attestationUrl && (
-                              <a href={run.attestationUrl} target="_blank" rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 text-xs font-mono px-4 py-2 rounded-lg transition-colors"
-                                style={{ border: "1px solid rgba(123,94,255,0.40)", color: "#7B5EFF", background: "rgba(123,94,255,0.06)" }}>
-                                ⛓ VERIFY ON KITESCAN ↗
-                              </a>
+                              <div className="flex flex-wrap gap-3">
+                                <a href={run.attestationUrl} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-xs font-mono px-4 py-2 rounded-lg transition-colors"
+                                  style={{ border: "1px solid rgba(123,94,255,0.40)", color: "#7B5EFF", background: "rgba(123,94,255,0.06)" }}>
+                                  ⛓ VERIFY ON KITESCAN ↗
+                                </a>
+                                {run.runId && (
+                                  <Link href={`/app/runs/${run.runId}`}
+                                    className="inline-flex items-center gap-2 text-xs font-mono px-4 py-2 rounded-lg transition-colors"
+                                    style={{ border: "1px solid #1E3A5F", color: "#4A7090", background: "transparent" }}>
+                                    VIEW FULL RUN DETAIL →
+                                  </Link>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -632,6 +658,11 @@ export default function NexumDashboard() {
           </div>
         </div>
       </main>
+
+      {/* ── Runs Monitor ── */}
+      <section className="max-w-7xl mx-auto px-4 md:px-6 pb-12">
+        <RunsMonitor />
+      </section>
 
       {/* ── Footer ── */}
       <footer className="border-t border-[#1E3A5F] mt-16 py-6">

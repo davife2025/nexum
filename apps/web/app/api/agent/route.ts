@@ -18,6 +18,7 @@ import {
   KITE_X402_SERVICES,
 } from "@nexum/x402";
 import type { AgentEvent, AgentStep, PaymentRecord, Attestation } from "@nexum/types";
+import { store } from "../../../lib/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest) {
   if (!task) return new Response("Task required", { status: 400 });
 
   const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const startedAt = Date.now();
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -108,6 +110,9 @@ export async function POST(req: NextRequest) {
         const identity = buildAgentIdentity(wallet, "nexum-commerce-agent", "testnet");
 
         send({ type: "run_start", runId, agent: identity, timestamp: Date.now() });
+
+        // Persist run to store immediately
+        store.upsert({ id: runId, task, location, agentAddress: wallet.address, status: "running", startedAt: Date.now(), payments: [], attestations: [], totalSpend: "0", servicesUsed: [], stepsCount: 0 });
 
         // Step: Agent init
         send({ type: "step_start", runId, step: { id: "agent_init", label: "AGENT INIT", description: "Bootstrapping Nexum agent on Kite chain...", status: "running" }, timestamp: Date.now() });
@@ -223,6 +228,8 @@ export async function POST(req: NextRequest) {
             explorerUrl: payAttest.explorerUrl,
           });
           payments.push(payRecord);
+          store.addPayment(runId, payRecord);
+          if (payAttest.txHash) store.addAttestation(runId, payAttest);
 
           send({
             type: "step_complete", runId,
@@ -265,6 +272,16 @@ export async function POST(req: NextRequest) {
           metadata: `services=${payments.length} spend=${totalSpend} task=${task.slice(0, 60)}`,
         });
         attestations.push(finalAttest);
+        store.addAttestation(runId, finalAttest);
+        store.upsert({
+          id: runId,
+          status: "complete",
+          result,
+          completedAt: Date.now(),
+          durationMs: Date.now() - (store.get(runId)?.startedAt ?? startedAt),
+          servicesUsed: payments.map(p => p.serviceId),
+          stepsCount: 5,
+        });
 
         send({
           type: "step_complete", runId,
@@ -295,6 +312,7 @@ export async function POST(req: NextRequest) {
 
       } catch (err: unknown) {
         send({ type: "run_error", runId, error: err instanceof Error ? err.message : String(err), timestamp: Date.now() });
+        store.upsert({ id: runId, status: "error", error: err instanceof Error ? err.message : String(err), completedAt: Date.now(), durationMs: Date.now() - (store.get(runId)?.startedAt ?? startedAt) });
       } finally {
         ctrl.close();
       }

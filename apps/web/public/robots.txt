@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /marketplace
+Allow: /providers
+
+# Private pages — no indexing
+Disallow: /app
+Disallow: /app/runs
+Disallow: /history
+Disallow: /agent
+Disallow: /attestations
+Disallow: /api/
+
+Sitemap: https://nexum.vercel.app/sitemap.xml

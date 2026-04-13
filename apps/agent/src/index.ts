@@ -83,30 +83,52 @@ function handleEvent(e: AgentEvent) {
       log("  ⛓ ATTEST", c.cyan, e.attestation?.explorerUrl ?? "");
       break;
 
-    case "run_complete":
+    case "run_complete": {
+      const meta = e.meta as Record<string, string | number> | undefined;
+      const durationSec = meta?.durationMs ? (Number(meta.durationMs) / 1000).toFixed(1) : "—";
       console.log();
-      log("✦ COMPLETE", c.green, `Run ${e.runId}`);
-      if (e.meta) {
-        log(
-          "  SPEND",
-          c.cyan,
-          `${e.meta.totalSpend} · ${e.meta.paymentsCount} payments · ${e.meta.attestationsCount} attestations`
-        );
-        if (e.meta.attestationUrl) {
-          log("  PROOF", c.cyan, String(e.meta.attestationUrl));
-        }
+
+      // ── Summary box ──────────────────────────────────────────────────
+      const W = 54;
+      const line = (label: string, value: string, color = c.white) => {
+        const pad = W - 4 - label.length - value.length;
+        console.log(`${c.dim}│${c.reset} ${c.dim}${label}${c.reset}${" ".repeat(Math.max(0, pad))}${color}${value}${c.reset} ${c.dim}│${c.reset}`);
+      };
+      console.log(`${c.dim}╔${"═".repeat(W - 2)}╗${c.reset}`);
+      console.log(`${c.dim}│${c.reset} ${c.bold}${c.green}✦ NEXUM RUN COMPLETE${c.reset}${" ".repeat(W - 24)}${c.dim}│${c.reset}`);
+      console.log(`${c.dim}├${"─".repeat(W - 2)}┤${c.reset}`);
+      line("Run ID",       String(e.runId ?? "—").slice(-20),         c.cyan);
+      line("Duration",     `${durationSec}s`,                         c.white);
+      line("Payments",     `${meta?.paymentsCount ?? 0}`,             c.yellow);
+      line("Total Spend",  `${meta?.totalSpend ?? 0} KITE`,           c.cyan);
+      line("Attestations", `${meta?.attestationsCount ?? 0} on-chain`, c.magenta);
+      if (meta?.attestationUrl) {
+        console.log(`${c.dim}├${"─".repeat(W - 2)}┤${c.reset}`);
+        const url = String(meta.attestationUrl).replace("https://", "");
+        line("Proof",      url.slice(0, W - 10),                      c.magenta);
       }
+      console.log(`${c.dim}╚${"═".repeat(W - 2)}╝${c.reset}`);
       console.log();
+
+      // ── Intelligence brief ────────────────────────────────────────────
       if (e.result) {
-        console.log(
-          `${c.bold}${c.white}── INTELLIGENCE BRIEF ─────────────────────────────────${c.reset}`
-        );
-        console.log(`\n${e.result}\n`);
-        console.log(
-          `${c.dim}────────────────────────────────────────────────────────${c.reset}`
-        );
+        console.log(`${c.bold}${c.white}── INTELLIGENCE BRIEF ──────────────────────────────────${c.reset}`);
+        // Word-wrap at 70 chars
+        const words = e.result.split(" ");
+        let currentLine = "";
+        for (const word of words) {
+          if ((currentLine + " " + word).trim().length > 70) {
+            console.log(`  ${currentLine}`);
+            currentLine = word;
+          } else {
+            currentLine = currentLine ? currentLine + " " + word : word;
+          }
+        }
+        if (currentLine) console.log(`  ${currentLine}`);
+        console.log(`${c.dim}────────────────────────────────────────────────────────${c.reset}`);
       }
       break;
+    }
 
     case "run_error":
       log("✗ ERROR", c.red, e.error ?? "Unknown");

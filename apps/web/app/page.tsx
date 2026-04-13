@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const STEPS = [
   { icon: "◈", color: "#00E5C9", label: "Discover", desc: "Scans Kite service registry for relevant APIs" },
@@ -51,9 +51,17 @@ const S: Record<string, React.CSSProperties> = {
 
 export default function Landing() {
   const [vis, setVis] = useState<number[]>([]);
-  useEffect(() => {
-    LINES.forEach((l, i) => { const t = setTimeout(() => setVis(p => [...p, i]), l.d + 500); return () => clearTimeout(t); });
+  const [key, setKey] = useState(0);
+
+  const startAnimation = useCallback(() => {
+    setVis([]);
+    setKey(k => k + 1);
   }, []);
+
+  useEffect(() => {
+    const timers = LINES.map((l, i) => setTimeout(() => setVis(p => [...p, i]), l.d + 500));
+    return () => timers.forEach(clearTimeout);
+  }, [key]);
 
   return (
     <div style={S.page}>
@@ -67,7 +75,7 @@ export default function Landing() {
             <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, color: "#F8FAFC", fontSize: 16 }}>nexum</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            {([["Marketplace","/marketplace"],["History","/history"],["Agent","/agent"],["Attestations","/attestations"]] as [string,string][]).map(([l,h]) => (
+            {([["Marketplace","/marketplace"],["History","/history"],["Agent","/agent"],["Providers","/providers"]] as [string,string][]).map(([l,h]) => (
               <Link key={h} href={h} style={{ fontSize: 13, color: "#4A7090", textDecoration: "none" }}>{l}</Link>
             ))}
             <Link href="/app" style={{ ...S.btn, padding: "7px 18px", fontSize: 13 }}>Launch App →</Link>
@@ -94,10 +102,12 @@ export default function Landing() {
           </div>
         </div>
         {/* Terminal */}
-        <div style={{ ...S.card, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+        <div style={{ ...S.card, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.4)", cursor: "pointer" }}
+          onClick={startAnimation} title="Click to replay">
           <div style={{ padding: "10px 14px", borderBottom: "1px solid #1E3A5F", display: "flex", alignItems: "center", gap: 6 }}>
             {["#FF4D6A","#FFB300","#00E5C9"].map(c => <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: .7 }} />)}
             <span style={{ fontSize: 11, ...S.mono, color: "#4A7090", marginLeft: 8 }}>nexum agent</span>
+            <span style={{ fontSize: 10, ...S.mono, color: "#2A4060", marginLeft: "auto" }}>click to replay ↺</span>
           </div>
           <div style={{ padding: "16px 16px 24px", minHeight: 280, ...S.mono, fontSize: 12, lineHeight: 1.9 }}>
             {LINES.map((l, i) => (

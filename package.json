@@ -24,16 +24,5 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "packageManager": "npm@10.0.0",
-  "main": "index.js",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/davife2025/nexum.git"
-  },
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/davife2025/nexum/issues"
-  },
-  "homepage": "https://github.com/davife2025/nexum#readme"
+  "packageManager": "npm@10.0.0"
 }

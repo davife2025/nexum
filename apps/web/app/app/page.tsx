@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppNav from "../components/AppNav";
 import RunsMonitor from "../components/RunsMonitor";
@@ -98,24 +99,57 @@ const LOCATIONS = ["San Francisco", "Lagos", "Tokyo", "London", "Singapore", "Du
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function NexumDashboard() {
+function NexumDashboardInner() {
+  const searchParams = useSearchParams();
   const [task, setTask] = useState("");
   const [location, setLocation] = useState("San Francisco");
   const [run, setRun] = useState<RunState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<"trace" | "payments" | "services" | "report">("trace");
   const abortRef = useRef<AbortController | null>(null);
+  const executeRef = useRef<HTMLButtonElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const taskInputRef = useRef<HTMLTextAreaElement>(null);
   const { add: toast } = useToast();
+
+  // Pre-fill from Marketplace "Dispatch Agent →" link or Run Detail "↺ Re-run"
+  useEffect(() => {
+    const serviceId = searchParams?.get("service");
+    const taskParam = searchParams?.get("task");
+    const locationParam = searchParams?.get("location");
+
+    if (taskParam) {
+      setTask(decodeURIComponent(taskParam));
+      if (locationParam) setLocation(decodeURIComponent(locationParam));
+      return;
+    }
+
+    if (serviceId && !task) {
+      fetch(`/api/services?id=${serviceId}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(svc => {
+          if (svc?.name) {
+            setTask(`Analyse and summarise data from the ${svc.name} service on Kite chain`);
+          }
+        })
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isRunning) {
+      setNow(Date.now()); // update once on stop so final elapsed is accurate
+      return;
+    }
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [isRunning]);
 
-  const elapsed = run ? ((run.completedAt ?? (isRunning ? now : Date.now())) - run.startedAt) : 0;
+  const elapsed = run
+    ? ((run.completedAt ?? (isRunning ? now : run.startedAt + (run.durationMs ?? 0))) - run.startedAt)
+    : 0;
 
   useEffect(() => {
     if (run?.result && run.status === "complete") setActiveTab("report");
@@ -133,10 +167,11 @@ export default function NexumDashboard() {
     // Side-effects (toasts) — run outside setRun to avoid stale closure issues
     if (event.type === "run_complete") {
       const meta = event.meta as Record<string, string> | undefined;
+      const spendStr = meta?.totalSpend ? ` · ${meta.totalSpend}` : "";
       toastRef.current({
         kind: "success",
         title: "Run complete",
-        body: `${meta?.paymentsCount ?? 0} payment${meta?.paymentsCount !== 1 ? "s" : ""} · ${meta?.attestationsCount ?? 0} attestations`,
+        body: `${meta?.paymentsCount ?? 0} payment${meta?.paymentsCount !== 1 ? "s" : ""}${spendStr} · ${meta?.attestationsCount ?? 0} attestations`,
         href: meta?.attestationUrl,
         duration: 7000,
       });
@@ -279,18 +314,28 @@ export default function NexumDashboard() {
                 ))}
               </div>
 
-              <button onClick={execute} disabled={!task.trim() || isRunning}
-                className="btn-teal w-full py-3 text-sm font-display font-semibold tracking-wide rounded-lg">
-                {isRunning
-                  ? <span className="flex items-center justify-center gap-2"><span className="dot dot-amber" />AGENT RUNNING…</span>
-                  : "▶ EXECUTE AGENT"}
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button ref={executeRef} onClick={execute} disabled={!task.trim() || isRunning}
+                  className="btn-teal py-3 text-sm font-display font-semibold tracking-wide rounded-lg"
+                  style={{ flex: 1 }}>
+                  {isRunning
+                    ? <span className="flex items-center justify-center gap-2"><span className="dot dot-amber" />AGENT RUNNING…</span>
+                    : "▶ EXECUTE AGENT"}
+                </button>
+                {isRunning && (
+                  <button
+                    onClick={() => { abortRef.current?.abort(); setIsRunning(false); }}
+                    style={{ fontSize: 12, fontFamily: "'IBM Plex Mono',monospace", color: "#FF4D6A", border: "1px solid rgba(255,77,106,0.4)", background: "rgba(255,77,106,0.06)", padding: "0 16px", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    ■ Stop
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Quick tasks */}
             {!run && (
               <div className="nx-panel p-4">
-                <QuickTasks onSelect={(t, loc) => { setTask(t); setLocation(loc); }} />
+                <QuickTasks onSelect={(t, loc) => { setTask(t); setLocation(loc); setTimeout(() => executeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} />
               </div>
             )}
 
@@ -678,5 +723,13 @@ export default function NexumDashboard() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function NexumDashboard() {
+  return (
+    <Suspense fallback={null}>
+      <NexumDashboardInner />
+    </Suspense>
   );
 }

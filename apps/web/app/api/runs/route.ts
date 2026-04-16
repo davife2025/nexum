@@ -9,3 +9,8 @@ export async function GET() {
   const stats = store.stats();
   return NextResponse.json({ runs, stats });
 }
+
+export async function DELETE() {
+  const deleted = store.clear();
+  return NextResponse.json({ ok: true, deleted, message: `Cleared ${deleted} runs` });
+}

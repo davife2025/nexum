@@ -48,6 +48,9 @@ nexum/
 │   │   │   │   ├── SpendChart.tsx      SVG spend-over-time bar chart
 │   │   │   │   ├── QuickTasks.tsx        Suggested task launcher for idle state
 │   │   │   │   └── Toast.tsx             Toast notification system (run complete, payments, errors)
+│   │   │   ├── loading.tsx             Root loading state
+│   │   │   ├── {route}/loading.tsx     Per-route loading states (×6)
+│   │   │   └── {route}/error.tsx       Per-route error boundaries (×6)
 │   │   │   └── api/
 │   │   │       ├── agent/route.ts         POST — streaming agent execution (SSE)
 │   │   │       ├── agent/balance/route.ts GET  — live wallet balance from Kite RPC
@@ -160,6 +163,7 @@ Set two environment variables in the Vercel dashboard:
 | `GET` | `/api/runs` | All runs + aggregate stats |
 | `GET` | `/api/runs/:id` | Single run detail |
 | `DELETE` | `/api/runs/:id` | Delete a run from the store |
+| `DELETE` | `/api/runs` | Clear all runs from the store |
 | `GET` | `/api/history` | Payment ledger with spend summary |
 | `GET` | `/api/history/export` | CSV download of all payments |
 | `GET` | `/api/attestations` | On-chain attestation timeline |
@@ -171,6 +175,7 @@ Set two environment variables in the Vercel dashboard:
 | `POST` | `/api/agent/policy` | Save spend policy (validated) |
 | `GET` | `/api/history/export` | CSV download of all payments |
 | `GET` | `/api/health` | Health check + live run stats |
+| `GET` | `/api/runs/stats` | Dedicated stats: totalRuns, spentToday, uniqueServices, activeRuns |
 | `POST` | `/api/providers` | Submit a service for marketplace review |
 | `GET` | `/api/providers` | List pending service registrations |
 | `GET` | `/api/status` | Live ping of all x402 service endpoints |

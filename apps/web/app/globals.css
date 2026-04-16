@@ -181,3 +181,16 @@ body::before {
 
 /* ── font-display utility (mirrors tailwind fontFamily.display) ───────────── */
 .font-display { font-family: 'Space Grotesk', system-ui, sans-serif; }
+
+/* ── Utility classes used by Marketplace detail panel ─────────────────────── */
+.text-violet { color: var(--violet); }
+.text-amber  { color: var(--amber); }
+
+/* ── Ensure hidden-mobile works as expected ────────────────────────────────── */
+@media (max-width: 768px) {
+  .hidden-mobile { display: none !important; }
+}
+
+/* ── Spin animation (used by loading.tsx files) ──────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 2s linear infinite; }

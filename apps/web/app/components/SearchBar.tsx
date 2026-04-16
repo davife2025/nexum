@@ -129,12 +129,24 @@ export default function SearchBar() {
             )}
 
             {/* Footer */}
-            <div style={{ padding:"8px 18px", borderTop:"1px solid #1E3A5F", display:"flex", gap:16, alignItems:"center" }}>
-              {[["↑↓","Navigate"],["↵","Open"],["ESC","Close"]].map(([key,label]) => (
-                <span key={key} style={{ fontSize:11, ...mono, color:"#4A7090" }}>
-                  <span style={{ color:"#B8D4E8", marginRight:4 }}>{key}</span>{label}
-                </span>
-              ))}
+            <div style={{ padding:"8px 18px", borderTop:"1px solid #1E3A5F", display:"flex", gap:16, alignItems:"center", justifyContent:"space-between" }}>
+              <div style={{ display:"flex", gap:14 }}>
+                {[["↑↓","Navigate"],["↵","Open"],["ESC","Close"]].map(([key,label]) => (
+                  <span key={key} style={{ fontSize:11, ...mono, color:"#4A7090" }}>
+                    <span style={{ color:"#B8D4E8", marginRight:4 }}>{key}</span>{label}
+                  </span>
+                ))}
+              </div>
+              {results.length > 0 && (
+                <div style={{ display:"flex", gap:8 }}>
+                  {(["run","payment","attestation"] as const).map(type => {
+                    const count = results.filter(r => r.type === type).length;
+                    if (!count) return null;
+                    const colors: Record<string,string> = { run:"#00E5C9", payment:"#FFB300", attestation:"#7B5EFF" };
+                    return <span key={type} style={{ fontSize:10, ...mono, color:colors[type] }}>{count} {type}{count!==1?"s":""}</span>;
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>

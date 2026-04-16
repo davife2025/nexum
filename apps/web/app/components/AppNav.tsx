@@ -87,7 +87,7 @@ export default function AppNav() {
             </a>
             {/* Hamburger */}
             <button onClick={() => setMobileOpen(o => !o)}
-              style={{ display: "none", flexDirection: "column", gap: 4, padding: "6px", background: "transparent", border: "1px solid #1E3A5F", borderRadius: 6, cursor: "pointer" }}
+              style={{ flexDirection: "column", gap: 4, padding: "6px", background: "transparent", border: "1px solid #1E3A5F", borderRadius: 6, cursor: "pointer" }}
               className="show-mobile" aria-label="Menu">
               {[0,1,2].map(i => (
                 <span key={i} style={{

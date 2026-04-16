@@ -22,7 +22,8 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
   },
   icons: { icon: "/favicon.svg", apple: "/favicon.svg" },
-  themeColor: "#0F172A",
+  manifest: "/manifest.json",
+  themeColor: "#0A2540",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

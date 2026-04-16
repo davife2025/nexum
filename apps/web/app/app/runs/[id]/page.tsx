@@ -29,6 +29,8 @@ export default function RunDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [tab, setTab] = useState<"overview" | "payments" | "attestations" | "brief">("overview");
 
   useEffect(() => {
     if (!id) return;
@@ -49,6 +51,14 @@ export default function RunDetail() {
       setDeleting(false);
     }
   }, [id, router]);
+
+  const handleShare = useCallback(() => {
+    const url = `${window.location.origin}/app/runs/${id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }, [id]);
 
   const S = {
     page: { background: "#0F172A", minHeight: "100vh", fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", color: "#B8D4E8" } as React.CSSProperties,
@@ -104,6 +114,14 @@ export default function RunDetail() {
               <div style={{ fontSize: 12, ...S.mono, color: statusColor, border: `1px solid ${statusColor}40`, background: `${statusColor}10`, borderRadius: 6, padding: "5px 12px" }}>
                 {run.status === "complete" ? "✓" : run.status === "error" ? "✗" : "●"} {run.status.toUpperCase()}
               </div>
+<Link href={`/app?task=${encodeURIComponent(run.task)}&location=${encodeURIComponent(run.location)}`}
+                style={{ fontSize: 11, ...S.mono, color: "#00E5C9", border: "1px solid rgba(0,229,201,0.35)", background: "rgba(0,229,201,0.06)", borderRadius: 6, padding: "5px 12px", textDecoration: "none" }}>
+                ↺ Re-run
+              </Link>
+              <button onClick={handleShare}
+                style={{ fontSize: 11, ...S.mono, color: copied ? "#7B5EFF" : "#4A7090", border: `1px solid ${copied ? "rgba(123,94,255,0.4)" : "#1E3A5F"}`, background: copied ? "rgba(123,94,255,0.08)" : "transparent", borderRadius: 6, padding: "5px 12px", cursor: "pointer", transition: "all .2s" }}>
+                {copied ? "✓ Copied!" : "⎘ Share"}
+              </button>
               <button onClick={handleDelete} disabled={deleting}
                 style={{ fontSize: 11, ...S.mono, color: "#FF4D6A", border: "1px solid rgba(255,77,106,0.3)", background: "rgba(255,77,106,0.06)", borderRadius: 6, padding: "5px 12px", cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.5 : 1 }}>
                 {deleting ? "…" : "✗ Delete"}
@@ -137,21 +155,32 @@ export default function RunDetail() {
               <div style={{ fontSize: 12, color: "#4A7090", textAlign: "center", padding: "20px 0" }}>No payments recorded</div>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {run.payments.map((p) => (
-                  <div key={p.id} style={{ background: "#0F172A", border: "1px solid rgba(0,229,201,0.2)", borderRadius: 8, padding: "12px 14px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <div style={{ fontSize: 13, color: "#F8FAFC", fontWeight: 500 }}>{p.serviceName}</div>
-                      <div style={{ fontSize: 13, ...S.mono, color: "#00E5C9" }}>{p.amountDisplay}</div>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, ...S.mono, color: "#7B5EFF" }}>✓ {p.status}</span>
+                {run.payments.map((p, i) => {
+                  const runningTotal = run.payments
+                    .slice(0, i + 1)
+                    .reduce((s, x) => s + parseFloat(x.amountDisplay?.split(" ")[0] ?? "0"), 0);
+                  return (
+                    <div key={p.id} style={{ background: "#0F172A", border: "1px solid rgba(0,229,201,0.2)", borderRadius: 8, padding: "12px 14px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <div>
+                          <div style={{ fontSize: 13, color: "#F8FAFC", fontWeight: 500, marginBottom: 2 }}>{p.serviceName}</div>
+                          <div style={{ fontSize: 10, ...S.mono, color: "#4A7090" }}>Payment {i + 1} of {run.payments.length} · cumulative: {runningTotal.toFixed(4)} KITE</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 13, ...S.mono, color: "#00E5C9", marginBottom: 2 }}>{p.amountDisplay}</div>
+                          <div style={{ fontSize: 10, ...S.mono, color: "#7B5EFF" }}>✓ {p.status}</div>
+                        </div>
+                      </div>
                       {p.txHash && (
-                        <a href={p.explorerUrl ?? `https://testnet.kitescan.ai/tx/${p.txHash}`} target="_blank" rel="noopener noreferrer"
-                          style={{ fontSize: 10, ...S.mono, color: "#7B5EFF", textDecoration: "none" }}>{shortHash(p.txHash)} ↗</a>
+                        <div style={{ paddingTop: 6, borderTop: "1px solid #1E3A5F", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, ...S.mono, color: "#4A7090" }}>Kite chain settlement</span>
+                          <a href={p.explorerUrl ?? `https://testnet.kitescan.ai/tx/${p.txHash}`} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 10, ...S.mono, color: "#7B5EFF", textDecoration: "none" }}>{shortHash(p.txHash)} ↗</a>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid #1E3A5F" }}>
                   <span style={{ fontSize: 11, ...S.mono, color: "#4A7090" }}>Total</span>
                   <span style={{ fontSize: 13, ...S.mono, color: "#00E5C9", fontWeight: 600 }}>{totalPaid.toFixed(4)} KITE</span>

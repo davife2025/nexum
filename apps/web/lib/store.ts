@@ -64,6 +64,12 @@ class RunStore {
     return this.runs.delete(id);
   }
 
+  clear(): number {
+    const count = this.runs.size;
+    this.runs.clear();
+    return count;
+  }
+
   all(): StoredRun[] {
     return Array.from(this.runs.values()).sort((a, b) => b.startedAt - a.startedAt);
   }

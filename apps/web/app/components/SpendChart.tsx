@@ -90,11 +90,11 @@ export default function SpendChart({ payments }: Props) {
                 fontSize="10" fontFamily={mono} fill={isToday ? "#B8D4E8" : "#4A7090"}>
                 {bar.label}
               </text>
-              {/* Amount on hover-like tooltip for non-zero */}
-              {bar.amount > 0 && (
+              {/* Amount label above bar for non-zero bars */}
+              {bar.amount > 0 && barH > 8 && (
                 <text x={x + barW / 2} y={y - 4} textAnchor="middle"
-                  fontSize="9" fontFamily={mono} fill={color} opacity={bar.amount > 0 ? 0.8 : 0}>
-                  {bar.amount.toFixed(1)}
+                  fontSize="9" fontFamily={mono} fill={color} opacity={0.85}>
+                  {bar.amount >= 10 ? bar.amount.toFixed(0) : bar.amount.toFixed(2)}
                 </text>
               )}
             </g>

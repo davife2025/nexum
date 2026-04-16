@@ -4,6 +4,16 @@ import { store } from "../../../lib/store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Static service definitions mirrored from /api/services for search
+const SEARCHABLE_SERVICES = [
+  { id: "kite-weather",   name: "Kite Weather API",       category: "data",     tags: ["weather","real-time","IoT"] },
+  { id: "nexum-finance",  name: "Nexum Finance Oracle",   category: "finance",  tags: ["DeFi","TVL","yield"] },
+  { id: "nexum-ai",       name: "Nexum AI Inference",     category: "ai",       tags: ["LLM","inference","compute"] },
+  { id: "kite-identity",  name: "Kite Identity Verifier", category: "identity", tags: ["KYC","passport","reputation"] },
+  { id: "nexum-compute",  name: "Decentralised Compute",  category: "compute",  tags: ["GPU","ML","training"] },
+  { id: "nexum-storage",  name: "Decentralised Storage",  category: "data",     tags: ["storage","IPFS","encrypted"] },
+];
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.toLowerCase().trim();

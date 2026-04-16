@@ -7,7 +7,13 @@
     "app/api/agent/balance/route.ts": {
       "maxDuration": 15
     },
+    "app/api/status/route.ts": {
+      "maxDuration": 15
+    },
     "app/api/search/route.ts": {
+      "maxDuration": 10
+    },
+    "app/api/runs/stats/route.ts": {
       "maxDuration": 10
     }
   },

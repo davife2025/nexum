@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import AppNav from "../components/AppNav";
 import Link from "next/link";
 import ServiceStatusStrip from "../components/ServiceStatusStrip";
@@ -30,6 +30,22 @@ export default function Marketplace() {
   const [cat, setCat] = useState("All");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Service | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [probeResult, setProbeResult] = useState<{live:boolean;status:number|null;latencyMs:number|null;requires402:boolean;requirement?:{scheme:string;network:string;maxAmountRequired:string;payTo:string;merchantName?:string};error?:string} | null>(null);
+
+  const probe = async (endpoint: string) => {
+    setProbing(true);
+    setProbeResult(null);
+    try {
+      const res = await fetch("/api/services/probe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint }) });
+      const data = await res.json();
+      setProbeResult(data);
+    } catch { setProbeResult({ live: false, status: null, latencyMs: null, requires402: false, error: "Network error" }); }
+    finally { setProbing(false); }
+  };
+
+  // Clear probe on selection change
+  React.useEffect(() => { setProbeResult(null); }, [selected]);
 
   const load = useCallback(async () => {
     try {
@@ -65,8 +81,16 @@ export default function Marketplace() {
 
         {/* Filters */}
         <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search services…"
-            style={{ ...S.mono, fontSize: 12, padding: "8px 14px", background: "#0A2540", border: "1px solid #1E3A5F", borderRadius: 8, color: "#B8D4E8", outline: "none", width: 220 }} />
+          <div style={{ position: "relative", display: "inline-block" }}>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search services…"
+              style={{ ...S.mono, fontSize: 12, padding: "8px 14px", paddingRight: search ? "30px" : "14px", background: "#0A2540", border: "1px solid #1E3A5F", borderRadius: 8, color: "#B8D4E8", outline: "none", width: 220 }} />
+            {search && (
+              <button onClick={() => setSearch("")}
+                style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#4A7090", background: "transparent", border: "none", cursor: "pointer", lineHeight: 1 }}>
+                ×
+              </button>
+            )}
+          </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {CATEGORIES.map(c => (
               <button key={c} onClick={() => setCat(c)}
@@ -84,7 +108,7 @@ export default function Marketplace() {
         <ServiceStatusStrip />
 
         {/* Grid + detail panel */}
-        <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 360px" : "1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 360px" : "1fr", gap: 16, marginTop: 20 }}>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${selected ? 2 : 3}, 1fr)`, gap: 16, alignContent: "start" }}>
 
             {loading && Array.from({ length: 6 }).map((_, i) => (
@@ -157,11 +181,39 @@ export default function Marketplace() {
                 <div style={{ fontSize: 11, ...S.mono, color: "#4A7090", wordBreak: "break-all" as const }}>{selected.payTo}</div>
               </div>
 
+              {/* Probe result */}
+              {probeResult && (
+                <div style={{ background: "#0F172A", border: `1px solid ${probeResult.live ? "rgba(0,229,201,0.3)" : "rgba(255,77,106,0.3)"}`, borderRadius: 8, padding: "12px 14px", marginBottom: 4 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, ...S.mono, color: "#4A7090" }}>PROBE RESULT</span>
+                    <span style={{ fontSize: 10, ...S.mono, color: probeResult.live ? "#00E5C9" : "#FF4D6A" }}>
+                      {probeResult.live ? "● LIVE" : "✗ UNREACHABLE"} {probeResult.latencyMs !== null && `· ${probeResult.latencyMs}ms`}
+                    </span>
+                  </div>
+                  {probeResult.status && <div style={{ fontSize: 11, ...S.mono, color: "#4A7090" }}>HTTP {probeResult.status} {probeResult.requires402 ? "· x402 required ✓" : ""}</div>}
+                  {probeResult.requirement && (
+                    <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                      {[["Scheme", probeResult.requirement.scheme], ["Amount", probeResult.requirement.maxAmountRequired + " wei"], ["PayTo", probeResult.requirement.payTo.slice(0,16) + "…"]].map(([l,v]) => (
+                        <div key={l} style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 9, ...S.mono, color: "#4A7090" }}>{l}</span>
+                          <span style={{ fontSize: 9, ...S.mono, color: "#00E5C9" }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {probeResult.error && <div style={{ fontSize: 10, ...S.mono, color: "#FF4D6A", marginTop: 4 }}>{probeResult.error}</div>}
+                </div>
+              )}
+
               <div style={{ display: "grid", gap: 8, marginTop: 20 }}>
                 <Link href={`/app?service=${selected.id}`}
                   style={{ display: "block", textAlign: "center", fontSize: 13, fontWeight: 600, color: "#0F172A", background: "#00E5C9", padding: "11px 0", borderRadius: 8, textDecoration: "none" }}>
                   Dispatch Agent →
                 </Link>
+                <button onClick={() => probe(selected.endpoint)} disabled={probing}
+                  style={{ fontSize: 12, ...S.mono, color: "#00E5C9", border: "1px solid rgba(0,229,201,0.35)", background: "rgba(0,229,201,0.06)", padding: "9px 0", borderRadius: 8, cursor: probing ? "not-allowed" : "pointer", opacity: probing ? 0.6 : 1 }}>
+                  {probing ? "Probing…" : "⚡ Test Service (402 probe)"}
+                </button>
                 <a href={`https://testnet.kitescan.ai/address/${selected.payTo}`} target="_blank" rel="noopener noreferrer"
                   style={{ display: "block", textAlign: "center", fontSize: 12, ...S.mono, color: "#7B5EFF", border: "1px solid rgba(123,94,255,0.35)", padding: "8px 0", borderRadius: 8, textDecoration: "none", background: "rgba(123,94,255,0.06)" }}>
                   ⛓ View payee on KiteScan ↗

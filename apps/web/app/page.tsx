@@ -1,6 +1,6 @@
 "use client";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useState, useEffect, useCallback } from "react";
 
 const STEPS = [
   { icon: "◈", color: "#00E5C9", label: "Discover", desc: "Scans Kite service registry for relevant APIs" },
@@ -8,7 +8,7 @@ const STEPS = [
   { icon: "✦", color: "#7B5EFF", label: "Execute",  desc: "Claude synthesises data into intelligence brief" },
   { icon: "⛓", color: "#7B5EFF", label: "Settle",   desc: "Completion proof anchored on Kite testnet" },
 ];
-const STATS = [
+const CHAIN_STATS = [
   { value: "< $0.000001", label: "Gas per tx" },
   { value: "1s",          label: "Block time" },
   { value: "2368",        label: "Chain ID" },
@@ -50,6 +50,10 @@ const S: Record<string, React.CSSProperties> = {
 };
 
 export default function Landing() {
+  const [liveStats, setLiveStats] = React.useState<{totalRuns?:number;totalPayments?:number;totalSpend?:string;uniqueServices?:number} | null>(null);
+  React.useEffect(() => {
+    fetch("/api/runs/stats").then(r => r.ok ? r.json() : null).then(d => d && setLiveStats(d)).catch(() => {});
+  }, []);
   const [vis, setVis] = useState<number[]>([]);
   const [key, setKey] = useState(0);
 
@@ -97,7 +101,9 @@ export default function Landing() {
             Nexum autonomously discovers services, executes x402 stablecoin payments, enforces programmable spend policy, and settles every action on Kite chain.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Link href="/app" style={S.btn}>Try the Agent →</Link>
+            <Link href={`/app?task=${encodeURIComponent("Analyse weather patterns in Lagos and their impact on DeFi liquidity pools on Kite chain")}&location=Lagos`} style={S.btn}>
+              Try the Agent →
+            </Link>
             <a href="https://docs.gokite.ai" target="_blank" rel="noopener noreferrer" style={S.ghost}>Kite Docs ↗</a>
           </div>
         </div>
@@ -120,8 +126,8 @@ export default function Landing() {
 
       {/* Stats */}
       <section style={{ borderTop: "1px solid #1E3A5F", borderBottom: "1px solid #1E3A5F", background: "rgba(10,37,64,0.4)" }}>
-        <div style={{ ...S.wrap, display: "grid", gridTemplateColumns: "repeat(4,1fr)" }}>
-          {STATS.map(({ value, label }, i) => (
+        <div style={{ ...S.wrap, display: "grid", gridTemplateColumns: `repeat(${liveStats ? 5 : 4},1fr)` }}>
+          {CHAIN_STATS.map(({ value, label }, i) => (
             <div key={label} style={{ padding: "24px 20px", borderRight: i < 3 ? "1px solid #1E3A5F" : "none", textAlign: "center" }}>
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 26, color: "#00E5C9", marginBottom: 4 }}>{value}</div>
               <div style={{ fontSize: 12, ...S.mono, color: "#4A7090", letterSpacing: ".06em" }}>{label}</div>

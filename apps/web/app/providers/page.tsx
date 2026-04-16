@@ -300,15 +300,19 @@ export default function ProvidersPage() {
                   </div>
 
                   <button onClick={async () => {
-                    const res = await fetch("/api/providers", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(form),
-                    });
-                    if (res.ok) setSubmitted(true);
-                    else {
-                      const d = await res.json();
-                      alert(d.error ?? "Submission failed");
+                    try {
+                      const res = await fetch("/api/providers", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(form),
+                      });
+                      if (res.ok) setSubmitted(true);
+                      else {
+                        const d = await res.json().catch(() => ({}));
+                        alert(d.error ?? "Submission failed. Please try again.");
+                      }
+                    } catch {
+                      alert("Network error. Please check your connection.");
                     }
                   }} disabled={!form.name || !form.endpoint || !form.wallet}
                     style={{ fontSize: 14, fontWeight: 600, color: "#0F172A", background: form.name && form.endpoint && form.wallet ? "#00E5C9" : "#1E3A5F", border: "none", padding: "12px 0", borderRadius: 8, cursor: form.name && form.endpoint && form.wallet ? "pointer" : "not-allowed", transition: "all .2s" }}>

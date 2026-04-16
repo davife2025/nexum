@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // In-memory pending registrations — in production: DB + email notification
 const g = globalThis as unknown as { __nexumRegistrations?: Registration[] };

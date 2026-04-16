@@ -21,6 +21,7 @@ import type { AgentEvent, AgentStep, PaymentRecord, Attestation } from "@nexum/t
 import { store } from "../../../lib/store";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // ── Service catalog (web-side copy for edge compatibility) ────────────────────
@@ -296,16 +297,22 @@ export async function POST(req: NextRequest) {
         });
 
         // ── Run complete ─────────────────────────────────────────────────
+        const durationMs = Date.now() - startedAt;
+        const totalSpendKite = Number(totalSpend) / 1e18;
+        const totalSpendDisplay = totalSpendKite > 0
+          ? totalSpendKite.toFixed(4) + " KITE"
+          : payments.reduce((s, p) => s + parseFloat(p.amountDisplay?.split(" ")[0] ?? "0"), 0).toFixed(4) + " KITE";
+
         send({
           type: "run_complete", runId,
           result,
           meta: {
-            totalSpend: totalSpend.toString(),
+            totalSpend: totalSpendDisplay,
             paymentsCount: payments.length,
             attestationsCount: attestations.length,
             attestationUrl: finalAttest.explorerUrl,
             agentAddress: wallet.address,
-            durationMs: Date.now(),
+            durationMs,
           },
           timestamp: Date.now(),
         });

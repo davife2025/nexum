@@ -69,9 +69,10 @@ const QUICK_TASKS: Task[] = [
 
 interface Props {
   onSelect: (task: string, location: string) => void;
+  taskInputRef?: React.RefObject<HTMLTextAreaElement>;
 }
 
-export default function QuickTasks({ onSelect }: Props) {
+export default function QuickTasks({ onSelect, taskInputRef }: Props) {
   const mono: React.CSSProperties = { fontFamily: "'IBM Plex Mono',monospace" };
   const sans: React.CSSProperties = { fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" };
 
@@ -82,7 +83,13 @@ export default function QuickTasks({ onSelect }: Props) {
       </div>
       <div style={{ display: "grid", gap: 8 }}>
         {QUICK_TASKS.map((qt) => (
-          <button key={qt.label} onClick={() => onSelect(qt.task, qt.location)}
+          <button key={qt.label} onClick={() => {
+              onSelect(qt.task, qt.location);
+              setTimeout(() => {
+                taskInputRef?.current?.focus();
+                taskInputRef?.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }, 50);
+            }}
             style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "#0F172A", border: "1px solid #1E3A5F", borderRadius: 8, cursor: "pointer", textAlign: "left", transition: "all .15s", width: "100%" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = `${qt.color}40`; e.currentTarget.style.background = `${qt.color}06`; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "#1E3A5F"; e.currentTarget.style.background = "#0F172A"; }}>

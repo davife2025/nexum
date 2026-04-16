@@ -25,13 +25,20 @@ export async function GET() {
   );
 
   const headers = [
-    "date", "runId", "task", "location", "service", "serviceId",
+    "date", "runId", "task", "location", "service", "serviceId", "category",
     "amount", "token", "payTo", "status", "txHash", "explorerUrl", "agentAddress",
   ];
 
-  const rows = payments.map((p) =>
-    headers.map((h) => (p as Record<string, string>)[h] ?? "").join(",")
-  );
+  const rows = payments.map((p) => {
+    // Try to infer category from serviceId prefix
+    const cat = p.serviceId.includes("finance") ? "finance"
+      : p.serviceId.includes("ai") ? "ai"
+      : p.serviceId.includes("identity") ? "identity"
+      : p.serviceId.includes("compute") ? "compute"
+      : "data";
+    const rowData = { ...p, category: cat };
+    return headers.map((h) => (rowData as Record<string, string>)[h] ?? "").join(",");
+  });
 
   const csv = [headers.join(","), ...rows].join("\n");
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // In-memory policy store — in production use a DB or KV
 const g = globalThis as unknown as { __nexumPolicy?: SpendPolicy };

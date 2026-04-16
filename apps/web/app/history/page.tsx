@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import AppNav from "../components/AppNav";
 import Link from "next/link";
 import SpendChart from "../components/SpendChart";
+import ServiceStatusStrip from "../components/ServiceStatusStrip";
 
 interface Payment {
   id: string; runId: string; serviceId: string; serviceName: string;
@@ -28,6 +29,7 @@ export default function History() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"payments"|"overview">("overview");
+  const [dateRange, setDateRange] = useState<"7d"|"30d"|"all">("all");
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +49,8 @@ export default function History() {
     mono: { fontFamily:"'IBM Plex Mono',monospace" } as React.CSSProperties,
   };
 
+  const rangeMs = dateRange === "7d" ? 7*86400000 : dateRange === "30d" ? 30*86400000 : Infinity;
+  const filteredPayments = payments.filter(p => Date.now() - p.timestamp <= rangeMs);
   const spentToday = parseFloat(summary?.spentToday ?? "0");
   const spentMonth = parseFloat(summary?.spentMonth ?? "0");
   const totalSpend = parseFloat(summary?.totalSpend ?? "0");
@@ -105,9 +109,26 @@ export default function History() {
         {/* Spend chart */}
         {payments.length > 0 && (
           <div style={{ marginBottom: 24 }}>
-            <SpendChart payments={payments} />
+            <SpendChart payments={filteredPayments} />
           </div>
         )}
+
+        {/* Service status */}
+        <ServiceStatusStrip />
+
+        {/* Date range pills */}
+        <div style={{ display:"flex", gap:6, marginBottom:16, alignItems:"center" }}>
+          <span style={{ fontSize:11, ...S.mono, color:"#4A7090" }}>Show:</span>
+          {(["7d","30d","all"] as const).map(r => (
+            <button key={r} onClick={() => setDateRange(r)}
+              style={{ fontSize:11, ...S.mono, padding:"4px 14px", borderRadius:6, border:`1px solid ${dateRange===r?"rgba(0,229,201,0.5)":"#1E3A5F"}`, color:dateRange===r?"#00E5C9":"#4A7090", background:dateRange===r?"rgba(0,229,201,0.07)":"transparent", cursor:"pointer" }}>
+              {r === "all" ? "All time" : `Last ${r}`}
+            </button>
+          ))}
+          <span style={{ fontSize:11, ...S.mono, color:"#4A7090", marginLeft:8 }}>
+            {filteredPayments.length} payment{filteredPayments.length!==1?"s":""}
+          </span>
+        </div>
 
         {/* Tab toggle */}
         <div style={{ display:"flex", gap:4, marginBottom:16 }}>
@@ -123,7 +144,7 @@ export default function History() {
         {view === "overview" && (
           <div style={{ display:"grid", gap:12 }}>
             {(() => {
-              const byService = payments.reduce((acc, p) => {
+              const byService = filteredPayments.reduce((acc, p) => {
                 const key = p.serviceName;
                 if (!acc[key]) acc[key] = { name:key, id:p.serviceId, count:0, total:0, latest:0 };
                 acc[key].count++;
@@ -174,7 +195,7 @@ export default function History() {
             {!loading && payments.length === 0 && (
               <div style={{ padding:"40px", textAlign:"center", fontSize:13, color:"#4A7090" }}>No payments recorded yet</div>
             )}
-            {payments.map((p,i) => (
+            {filteredPayments.map((p,i) => (
               <div key={p.id} style={{ display:"grid", gridTemplateColumns:"1fr 160px 120px 80px 160px", borderBottom:i<payments.length-1?"1px solid #1E3A5F":"none", transition:"background .15s" }}
                 onMouseEnter={e=>(e.currentTarget.style.background="rgba(0,229,201,0.03)")}
                 onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>

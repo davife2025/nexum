@@ -1,0 +1,36 @@
+{
+  "name": "Nexum — Agentic Commerce",
+  "short_name": "Nexum",
+  "description": "Autonomous AI agents that discover services, execute x402 payments, and settle on Kite chain.",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#0A2540",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable any"
+    }
+  ],
+  "categories": ["finance", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/app",
+      "description": "Agent dashboard"
+    },
+    {
+      "name": "Marketplace",
+      "url": "/marketplace",
+      "description": "Browse x402 services"
+    },
+    {
+      "name": "History",
+      "url": "/history",
+      "description": "Spend history"
+    }
+  ]
+}

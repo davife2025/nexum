@@ -31,8 +31,37 @@ export default function AttestationsPage() {
   const [attestations, setAttestations] = useState<Attestation[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [filter, setFilter] = useState("all");
+  const [runFilter, setRunFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<Attestation | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyHash = (hash: string, key: string) => {
+    navigator.clipboard.writeText(hash).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  };
+
+  const exportCSV = () => {
+    const headers = ["id","runId","type","contentHash","txHash","status","timestamp","metadata"];
+    const rows = attestations.map(a => headers.map(h => {
+      const v = (a as Record<string,unknown>)[h];
+      return typeof v === "string" ? `"${v.replace(/"/g,"'")}"` : String(v ?? "");
+    }).join(","));
+    const blob = new Blob([headers.join(",") + "
+" + rows.join("
+")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = `nexum-attestations-${Date.now()}.csv`;
+    link.click(); URL.revokeObjectURL(url);
+  };
   const [loading, setLoading] = useState(true);
+
+  // Client-side run filter on top of server-side type filter
+  const displayAttestations = runFilter
+    ? attestations.filter(a => a.runId === runFilter)
+    : attestations;
 
   const load = useCallback(async () => {
     try {
@@ -63,7 +92,13 @@ export default function AttestationsPage() {
         <div style={{ marginBottom:28 }}>
           <div style={{ fontSize:11, ...S.mono, color:"#4A7090", letterSpacing:".1em", marginBottom:8 }}>// ON-CHAIN PROOF</div>
           <h1 style={{ fontFamily:"'Space Grotesk',sans-serif", fontWeight:700, fontSize:28, color:"#F8FAFC", marginBottom:6 }}>Attestation Explorer</h1>
-          <p style={{ fontSize:13, color:"#4A7090" }}>Every agent action anchored on Kite testnet — decoded, verifiable, immutable.</p>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:12 }}>
+          <p style={{ fontSize:13, color:"#4A7090", margin:0 }}>Every agent action anchored on Kite testnet — decoded, verifiable, immutable.</p>
+          <button onClick={exportCSV}
+            style={{ fontSize:12, fontFamily:"'IBM Plex Mono',monospace", color:"#00E5C9", border:"1px solid rgba(0,229,201,0.35)", padding:"7px 16px", borderRadius:8, background:"rgba(0,229,201,0.06)", cursor:"pointer", whiteSpace:"nowrap" }}>
+            ↓ Export CSV
+          </button>
+        </div>
         </div>
 
         {/* Summary cards */}
@@ -81,6 +116,14 @@ export default function AttestationsPage() {
             </div>
           ))}
         </div>
+
+        {/* Run filter banner */}
+        {runFilter && (
+          <div style={{ ...S.card, padding:"10px 16px", marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center", border:"1px solid rgba(0,229,201,0.3)" }}>
+            <span style={{ fontSize:12, ...S.mono, color:"#00E5C9" }}>Filtered by run: {runFilter.slice(-16)}</span>
+            <button onClick={() => setRunFilter(null)} style={{ fontSize:12, ...S.mono, color:"#4A7090", background:"transparent", border:"1px solid #1E3A5F", borderRadius:6, padding:"3px 12px", cursor:"pointer" }}>Clear ×</button>
+          </div>
+        )}
 
         {/* Filter pills */}
         <div style={{ display:"flex", gap:6, marginBottom:18, flexWrap:"wrap" }}>
@@ -114,19 +157,23 @@ export default function AttestationsPage() {
               </div>
             )}
 
-            {attestations.map((a, idx) => {
+            {displayAttestations.map((a, idx) => {
               const meta = TYPE_META[a.type] ?? { icon:"·", color:"#4A7090", label:a.type };
               const isSelected = selected?.id === a.id;
-              const prevRun = idx > 0 ? attestations[idx-1].runId : null;
+              const prevRun = idx > 0 ? displayAttestations[idx-1].runId : null;
               const newRun = prevRun !== a.runId;
 
               return (
                 <div key={a.id}>
                   {newRun && (
-                    <div style={{ padding:"5px 14px", background:"#071018", borderBottom:"1px solid #1E3A5F" }}>
+                    <div style={{ padding:"5px 14px", background:"#071018", borderBottom:"1px solid #1E3A5F", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                       <Link href={`/app/runs/${a.runId}`} style={{ fontSize:10, ...S.mono, color:"#4A7090", textDecoration:"none" }}>
                         RUN: {a.runId} →
                       </Link>
+                      <button onClick={() => setRunFilter(r => r === a.runId ? null : a.runId)}
+                        style={{ fontSize:9, ...S.mono, color:runFilter===a.runId?"#00E5C9":"#4A7090", background:runFilter===a.runId?"rgba(0,229,201,0.08)":"transparent", border:`1px solid ${runFilter===a.runId?"rgba(0,229,201,0.4)":"#1E3A5F"}`, borderRadius:3, padding:"2px 8px", cursor:"pointer" }}>
+                        {runFilter===a.runId ? "✓ filtered" : "filter"}
+                      </button>
                     </div>
                   )}
                   <div onClick={() => setSelected(isSelected ? null : a)}
@@ -140,9 +187,15 @@ export default function AttestationsPage() {
                     </div>
                     <div style={{ padding:"10px 12px", alignSelf:"center" }}>
                       {a.txHash ? (
-                        <a href={a.explorerUrl??`https://testnet.kitescan.ai/tx/${a.txHash}`} target="_blank" rel="noopener noreferrer"
-                          onClick={e=>e.stopPropagation()}
-                          style={{ fontSize:11, ...S.mono, color:"#7B5EFF", textDecoration:"none" }}>{shortHash(a.txHash)} ↗</a>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <a href={a.explorerUrl??`https://testnet.kitescan.ai/tx/${a.txHash}`} target="_blank" rel="noopener noreferrer"
+                            onClick={e=>e.stopPropagation()}
+                            style={{ fontSize:11, ...S.mono, color:"#7B5EFF", textDecoration:"none" }}>{shortHash(a.txHash)} ↗</a>
+                          <button onClick={e => { e.stopPropagation(); copyHash(a.txHash!, a.id); }}
+                            style={{ fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:copied===a.id?"#7B5EFF":"#4A7090", background:"transparent", border:"1px solid #1E3A5F", borderRadius:3, padding:"1px 5px", cursor:"pointer" }}>
+                            {copied===a.id?"✓":"⎘"}
+                          </button>
+                        </div>
                       ) : <span style={{ fontSize:11, ...S.mono, color:"#2A4060" }}>simulated</span>}
                     </div>
                     <div style={{ padding:"10px 12px", fontSize:10, ...S.mono, color:"#4A7090", alignSelf:"center" }}>
@@ -175,10 +228,18 @@ export default function AttestationsPage() {
                   </span>
                 </div>
                 <div style={{ display:"grid", gap:8, marginBottom:16 }}>
-                  {[["RUN ID", selected.runId],["ATTESTATION ID", selected.id],["CONTENT HASH", shortHash(selected.contentHash)]].map(([label,value]) => (
+                  {[["RUN ID", selected.runId],["ATTESTATION ID", selected.id],["CONTENT HASH", selected.contentHash]].map(([label,value]) => (
                     <div key={label} style={{ background:"#0F172A", border:"1px solid #1E3A5F", borderRadius:6, padding:"8px 12px" }}>
                       <div style={{ fontSize:10, ...S.mono, color:"#4A7090", marginBottom:2 }}>{label}</div>
-                      <div style={{ fontSize:11, ...S.mono, color:"#B8D4E8", wordBreak:"break-all" }}>{value}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ fontSize:11, ...S.mono, color:"#B8D4E8", wordBreak:"break-all", flex:1 }}>
+                          {value.length > 24 ? `${value.slice(0,12)}…${value.slice(-8)}` : value}
+                        </div>
+                        <button onClick={() => copyHash(value, label)}
+                          style={{ fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:copied===label?"#7B5EFF":"#4A7090", background:"transparent", border:"1px solid #1E3A5F", borderRadius:3, padding:"1px 5px", cursor:"pointer", flexShrink:0 }}>
+                          {copied===label?"✓":"⎘"}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

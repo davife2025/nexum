@@ -92,9 +92,16 @@ export default function RunsMonitor() {
 
       {/* Header row */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 11, ...S.mono, color: "#4A7090", letterSpacing: ".1em" }}>// RECENT RUNS</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 10, ...S.mono, color: "#2A4060" }}>auto-refresh · updated {timeAgo(lastRefresh)}</span>
+          <div style={{ fontSize: 11, ...S.mono, color: "#4A7090", letterSpacing: ".1em" }}>// RECENT RUNS</div>
+          {runs.filter(r => r.status === "running").length > 0 && (
+            <span style={{ fontSize: 10, ...S.mono, color: "#00E5C9", background: "rgba(0,229,201,0.1)", border: "1px solid rgba(0,229,201,0.3)", borderRadius: 10, padding: "1px 8px" }}>
+              {runs.filter(r => r.status === "running").length} live
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 10, ...S.mono, color: "#2A4060" }}>updated {timeAgo(lastRefresh)}</span>
           <button onClick={refresh} style={{ fontSize: 10, ...S.mono, color: "#4A7090", background: "transparent", border: "1px solid #1E3A5F", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}>↻</button>
         </div>
       </div>

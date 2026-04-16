@@ -139,7 +139,57 @@ function handleEvent(e: AgentEvent) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const task = process.argv[2] ?? "analyse weather patterns and their impact on DeFi liquidity pools";
+  const arg = process.argv[2];
+
+  // --help flag
+  if (arg === "--help" || arg === "-h") {
+    console.log(`
+${c.bold}${c.white}nexum${c.reset} — Agentic Commerce on Kite Chain
+${c.dim}${"─".repeat(52)}${c.reset}
+
+${c.bold}USAGE${c.reset}
+  ${c.cyan}npx tsx src/index.ts${c.reset} [task] [options]
+
+${c.bold}ARGUMENTS${c.reset}
+  ${c.yellow}task${c.reset}    Natural language commerce task (quoted string)
+          Default: "analyse weather patterns and their
+                   impact on DeFi liquidity pools"
+
+${c.bold}OPTIONS${c.reset}
+  ${c.yellow}--help, -h${c.reset}    Show this help message
+
+${c.bold}ENVIRONMENT${c.reset}
+  ${c.yellow}ANTHROPIC_API_KEY${c.reset}   Required. From console.anthropic.com
+  ${c.yellow}AGENT_PRIVATE_KEY${c.reset}   Optional. Kite testnet wallet (0x-prefixed)
+                       Leave blank for ephemeral wallet.
+                       Fund at: ${c.cyan}faucet.gokite.ai${c.reset}
+
+${c.bold}EXAMPLES${c.reset}
+  ${c.dim}# Basic usage${c.reset}
+  npx tsx src/index.ts "analyse DeFi yields in Lagos"
+
+  ${c.dim}# With funded wallet for on-chain attestations${c.reset}
+  AGENT_PRIVATE_KEY=0x... npx tsx src/index.ts "research x402 adoption"
+
+  ${c.dim}# Using npm script (loads .env.local automatically)${c.reset}
+  npm run run:task "compare Kite chain TVL with competitors"
+
+${c.bold}OUTPUT${c.reset}
+  Each run produces:
+  · Live step-by-step trace with payment details
+  · Summary table: run ID, duration, payments, spend
+  · Commerce intelligence brief
+  · KiteScan attestation link (if wallet funded)
+
+${c.bold}CHAIN${c.reset}
+  Network: Kite Testnet · Chain ID: 2368
+  RPC:     rpc-testnet.gokite.ai
+  Scan:    testnet.kitescan.ai
+`);
+    process.exit(0);
+  }
+
+  const task = arg ?? "analyse weather patterns and their impact on DeFi liquidity pools";
 
   console.log(
     `\n${c.bold}${c.cyan}╔══════════════════════════════════════════════════════╗`

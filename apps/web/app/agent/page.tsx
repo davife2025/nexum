@@ -12,6 +12,7 @@ interface Balance { address: string; kite: string; usdt: string; chainId: string
 
 export default function AgentPage() {
   const [balance, setBalance] = useState<Balance | null>(null);
+  const [liveStats, setLiveStats] = useState<{ totalRuns?: number; totalAttestations?: number; totalPayments?: number } | null>(null);
   const [policy, setPolicy] = useState<Policy>({ perCall: "50", perDay: "500", perMonth: "5000", categories: ALL_CATS });
   const [draft, setDraft] = useState<Policy>(policy);
   const [editing, setEditing] = useState(false);
@@ -40,8 +41,12 @@ export default function AgentPage() {
   useEffect(() => {
     fetchBalance();
     fetchPolicy();
+    const loadStats = () =>
+      fetch("/api/runs/stats").then(r => r.ok ? r.json() : null).then(d => d && setLiveStats(d)).catch(() => {});
+    loadStats();
     const t = setInterval(fetchBalance, 30000);
-    return () => clearInterval(t);
+    const ts = setInterval(loadStats, 15000);
+    return () => { clearInterval(t); clearInterval(ts); };
   }, [fetchBalance, fetchPolicy]);
 
   const savePolicy = async () => {
@@ -153,6 +158,8 @@ export default function AgentPage() {
                 { label: "FACILITATOR", value: "facilitator.pieverse.io" },
                 { label: "POLICY", value: policy.updatedAt ? `Updated ${new Date(policy.updatedAt).toLocaleDateString()}` : "Default" },
                 { label: "CATEGORIES", value: `${policy.categories.length} allowed` },
+                { label: "TOTAL RUNS", value: liveStats ? `${liveStats.totalRuns ?? 0} complete` : "…" },
+                { label: "ATTESTATIONS", value: liveStats ? `${liveStats.totalAttestations ?? 0} on-chain` : "…" },
               ].map(({ label, value }) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #1E3A5F" }}>
                   <span style={{ fontSize: 10, ...S.mono, color: "#4A7090" }}>{label}</span>

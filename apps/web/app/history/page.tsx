@@ -10,6 +10,8 @@ interface Payment {
   amount: string; amountDisplay: string; token: string; payTo: string;
   txHash?: string; explorerUrl?: string; status: string; timestamp: number;
   runTask?: string; location?: string;
+  origin?: "passport" | "local";
+  sessionId?: string;
 }
 interface Summary { totalSpend: string; spentToday: string; spentMonth: string; count: number; }
 
@@ -200,7 +202,25 @@ export default function History() {
                 onMouseEnter={e=>(e.currentTarget.style.background="rgba(0,229,201,0.03)")}
                 onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
                 <div style={{ padding:"12px 16px" }}>
-                  <div style={{ fontSize:13, color:"#F8FAFC", marginBottom:2 }}>{p.serviceName}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:13, color:"#F8FAFC" }}>{p.serviceName}</span>
+                    {p.origin === "passport" && (
+                      <span title={p.sessionId ? `Passport session ${p.sessionId}` : "Paid via Kite Passport"}
+                        style={{ fontSize:9, ...S.mono, color:"#00E5C9", letterSpacing:".06em",
+                          padding:"1px 6px", border:"1px solid rgba(0,229,201,0.35)", borderRadius:3,
+                          background:"rgba(0,229,201,0.06)" }}>
+                        ⛨ PASSPORT
+                      </span>
+                    )}
+                    {p.origin === "local" && (
+                      <span title="Paid by local agent wallet (legacy x402)"
+                        style={{ fontSize:9, ...S.mono, color:"#7B5EFF", letterSpacing:".06em",
+                          padding:"1px 6px", border:"1px solid rgba(123,94,255,0.35)", borderRadius:3,
+                          background:"rgba(123,94,255,0.06)" }}>
+                        ◈ LOCAL
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize:11, ...S.mono, color:"#4A7090" }}>{timeAgo(p.timestamp)}</div>
                 </div>
                 <div style={{ padding:"12px 16px", fontSize:13, ...S.mono, color:"#00E5C9", alignSelf:"center" }}>{p.amountDisplay}</div>

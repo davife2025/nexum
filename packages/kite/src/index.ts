@@ -63,7 +63,10 @@ export function getWallet(
   if (privateKey) {
     return new ethers.Wallet(privateKey, provider);
   }
-  return ethers.Wallet.createRandom().connect(provider);
+  // ethers.Wallet.createRandom() returns HDNodeWallet, which differs from
+  // Wallet structurally. Reconstruct as a plain Wallet from the random key.
+  const random = ethers.Wallet.createRandom();
+  return new ethers.Wallet(random.privateKey, provider);
 }
 
 export function buildAgentIdentity(

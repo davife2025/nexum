@@ -1,6 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Nexum Agent — Autonomous Commerce Executor
 // Orchestrates discovery → purchase → task → settlement
+//
+// Payment routing:
+//   1. If a Kite Passport client + active session is provided, the agent
+//      delegates payment signing & settlement to Passport. The agent's
+//      local Kite wallet is used only for on-chain attestations.
+//   2. Otherwise, the agent falls back to the legacy local x402 flow:
+//      it signs authorizations with its own ephemeral key and settles
+//      via the Pieverse facilitator directly.
+//
+// The mode selection happens once per run, based on what's been provided
+// at construction time. See payment-driver.ts for the abstraction.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { ethers } from "ethers";
@@ -10,25 +21,18 @@ import {
   buildAgentIdentity,
   writeAttestation,
   hashContent,
-  checkBudget,
-  buildPaymentRecord,
   addressUrl,
 } from "@nexum/kite";
-import {
-  probeService,
-  createAuthorization,
-  callWithPayment,
-  settleViaFacilitator,
-  KITE_X402_SERVICES,
-} from "@nexum/x402";
+import { KITE_X402_SERVICES } from "@nexum/x402";
+import { PassportClient } from "@nexum/passport";
 import {
   discoverServices,
   rankServices,
   DEFAULT_POLICY,
   initBudgetState,
-  updateBudget,
   SubscriptionManager,
 } from "./commerce.js";
+import { makePaymentDriver } from "./payment-driver.js";
 import type {
   AgentRun,
   AgentTask,
@@ -36,7 +40,25 @@ import type {
   AgentStep,
   PaymentRecord,
   Attestation,
+  PassportSession,
+  X402Requirement,
 } from "@nexum/types";
+
+// ── Constructor options ──────────────────────────────────────────────────────
+
+export interface NexumAgentOptions {
+  /** Local agent wallet private key. Optional — ephemeral if absent. */
+  privateKey?: string;
+  /** Event sink — driver-style streaming. */
+  onEvent?: (e: AgentEvent) => void;
+  /** Kite Passport client. When provided alongside `passportSession`, all
+   *  payments route through Passport instead of the local x402 driver. */
+  passport?: PassportClient;
+  /** Active Passport session. Must be in "active" status. */
+  passportSession?: PassportSession;
+  /** Hook called on each Passport-mediated spend. */
+  onPassportSpend?: (sessionId: string, amountDisplay: string) => void;
+}
 
 // ── Agent Class ───────────────────────────────────────────────────────────────
 
@@ -45,11 +67,28 @@ export class NexumAgent {
   private budget = initBudgetState(DEFAULT_POLICY);
   private subscriptions = new SubscriptionManager();
   private onEvent?: (e: AgentEvent) => void;
+  private passport?: PassportClient;
+  private passportSession?: PassportSession;
+  private onPassportSpend?: (sessionId: string, amountDisplay: string) => void;
 
-  constructor(privateKey?: string, onEvent?: (e: AgentEvent) => void) {
+  constructor(
+    privateKeyOrOpts?: string | NexumAgentOptions,
+    onEventLegacy?: (e: AgentEvent) => void
+  ) {
+    // Backwards-compat: old call style was `new NexumAgent(privateKey, onEvent)`.
+    let opts: NexumAgentOptions;
+    if (typeof privateKeyOrOpts === "string" || privateKeyOrOpts === undefined) {
+      opts = { privateKey: privateKeyOrOpts, onEvent: onEventLegacy };
+    } else {
+      opts = privateKeyOrOpts;
+    }
+
     const provider = getProvider("testnet");
-    this.wallet = getWallet(provider, privateKey);
-    this.onEvent = onEvent;
+    this.wallet = getWallet(provider, opts.privateKey);
+    this.onEvent = opts.onEvent;
+    this.passport = opts.passport;
+    this.passportSession = opts.passportSession;
+    this.onPassportSpend = opts.onPassportSpend;
   }
 
   get identity() {
@@ -58,6 +97,15 @@ export class NexumAgent {
 
   get address() {
     return this.wallet.address;
+  }
+
+  /** Whether this run will execute payments through Kite Passport. */
+  get usingPassport(): boolean {
+    return (
+      !!this.passport &&
+      !!this.passportSession &&
+      this.passportSession.status === "active"
+    );
   }
 
   // ── Internal emitter ───────────────────────────────────────────────────────
@@ -104,12 +152,26 @@ export class NexumAgent {
       timestamp: Date.now(),
     });
 
+    // Build the payment driver once per run.
+    const driver = makePaymentDriver({
+      wallet: this.wallet,
+      budget: this.budget,
+      session: this.passportSession,
+      passport: this.passport,
+      onBudgetUpdate: (b) => {
+        this.budget = b;
+      },
+      onPassportSpend: this.onPassportSpend,
+    });
+
     try {
       // ── STEP 1: Agent initialisation ────────────────────────────────────
       this.emitStep(runId, {
         id: "agent_init",
         label: "AGENT INIT",
-        description: `Nexum agent online · wallet ${this.address.slice(0, 10)}...`,
+        description: this.usingPassport
+          ? `Nexum agent online · Kite Passport session ${this.passportSession?.id.slice(0, 12)}…`
+          : `Nexum agent online · wallet ${this.address.slice(0, 10)}...`,
         status: "running",
       });
 
@@ -117,14 +179,18 @@ export class NexumAgent {
         runId,
         type: "agent_init",
         contentHash: hashContent(task.input + runId),
-        metadata: `Task: ${task.input.slice(0, 80)}`,
+        metadata: this.usingPassport
+          ? `Passport ${this.passportSession?.id} · Task: ${task.input.slice(0, 60)}`
+          : `Task: ${task.input.slice(0, 80)}`,
       });
       attestations.push(initAttest);
 
       const initStep: AgentStep = {
         id: "agent_init",
         label: "AGENT INIT",
-        description: `Agent wallet: ${this.address} · Network: Kite Testnet`,
+        description: this.usingPassport
+          ? `Passport mode · Agent wallet: ${this.address}`
+          : `Agent wallet: ${this.address} · Network: Kite Testnet`,
         status: "success",
         startedAt: Date.now(),
         completedAt: Date.now(),
@@ -134,6 +200,8 @@ export class NexumAgent {
           address: this.address,
           addressUrl: addressUrl(this.address),
           attestation: initAttest.txHash,
+          paymentMode: driver.mode,
+          sessionId: this.passportSession?.id,
         },
       };
       addStep(initStep);
@@ -151,7 +219,6 @@ export class NexumAgent {
       const discovered = discoverServices(task.input, this.budget.policy);
       const ranked = rankServices(discovered);
 
-      // Emit each discovered service
       ranked.forEach((svc) => {
         this.emit({
           type: "service_discovered",
@@ -174,7 +241,6 @@ export class NexumAgent {
       this.emitStep(runId, discoverStep, "step_complete");
 
       // ── STEP 3: x402 Paid Service Calls ─────────────────────────────────
-      // Use live Kite x402 weather service (plus simulated others)
       const liveService = KITE_X402_SERVICES[0];
       const allServicesToBuy = [
         liveService,
@@ -183,64 +249,82 @@ export class NexumAgent {
 
       for (const svc of allServicesToBuy) {
         await delay(300);
-        const svcName = "name" in svc ? svc.name : svc.id;
-        const svcEndpoint = "endpoint" in svc ? svc.endpoint : (svc as { endpoint: string }).endpoint;
-        const svcId = svc.id;
+        const svcName: string = svc.name;
+        const svcEndpoint: string = svc.endpoint;
+        const svcId: string = svc.id;
+        const params: Record<string, string> =
+          "params" in svc ? (svc.params as Record<string, string>) : {};
+
+        const stepLabel = driver.mode === "passport" ? "PASSPORT PAYMENT" : "x402 PAYMENT";
 
         this.emitStep(runId, {
           id: `pay_${svcId}`,
-          label: "x402 PAYMENT",
-          description: `Calling ${svcName} — awaiting 402 response...`,
+          label: stepLabel,
+          description: `Calling ${svcName}${driver.mode === "passport" ? " via Kite Passport" : " — awaiting 402 response"}...`,
           status: "running",
         });
 
-        // 1. Probe
-        const params = "params" in svc ? (svc.params as Record<string, string>) : {};
-        const probe = await probeService(svcEndpoint, params);
+        // Build a fallback x402 requirement for cataloged services that
+        // don't return a real 402 (so the local driver can still pay them).
+        const fallbackReq: X402Requirement = {
+          scheme: "gokite-aa",
+          network: "kite-testnet",
+          maxAmountRequired:
+            "pricePerCall" in svc
+              ? (svc as { pricePerCall: string }).pricePerCall
+              : "1000000000000000000",
+          resource: svcEndpoint,
+          description: svcName,
+          payTo:
+            "payTo" in svc
+              ? (svc as { payTo: string }).payTo
+              : "0x4A50DCA63d541372ad36E5A36F1D542d51164F19",
+          asset: "0x0fF5393387ad2f9f691FD6Fd28e07E3969e27e63",
+          maxTimeoutSeconds: 300,
+          merchantName: svcName,
+        };
 
-        if (!probe.needs402 && probe.data) {
-          // Service returned data without payment
+        this.emit({
+          type: "payment_start",
+          runId,
+          payment: {
+            serviceId: svcId,
+            serviceName: svcName,
+            amount: fallbackReq.maxAmountRequired,
+            payTo: fallbackReq.payTo,
+            status: "authorized",
+          },
+          timestamp: Date.now(),
+        });
+
+        const outcome = await driver.pay({
+          runId,
+          serviceId: svcId,
+          serviceName: svcName,
+          endpoint: svcEndpoint,
+          params,
+          fallbackRequirement: fallbackReq,
+        });
+
+        if (outcome.status === "free") {
           const freeStep: AgentStep = {
             id: `pay_${svcId}`,
-            label: "x402 PAYMENT",
+            label: stepLabel,
             description: `${svcName} responded without payment requirement`,
             status: "success",
             completedAt: Date.now(),
-            data: { response: probe.data },
+            data: { response: outcome.data },
           };
           addStep(freeStep);
           this.emitStep(runId, freeStep, "step_complete");
           continue;
         }
 
-        const req = probe.requirement ?? {
-          scheme: "gokite-aa",
-          network: "kite-testnet",
-          maxAmountRequired: "name" in svc && "pricePerCall" in svc
-            ? (svc as { pricePerCall: string }).pricePerCall
-            : "1000000000000000000",
-          resource: svcEndpoint,
-          description: svcName,
-          payTo: "payTo" in svc
-            ? (svc as { payTo: string }).payTo
-            : "0x4A50DCA63d541372ad36E5A36F1D542d51164F19",
-          asset: "0x0fF5393387ad2f9f691FD6Fd28e07E3969e27e63",
-          maxTimeoutSeconds: 300,
-          merchantName: svcName,
-        };
-
-        // 2. Budget check
-        const budgetCheck = checkBudget(
-          this.budget.policy,
-          this.budget.spentToday,
-          this.budget.spentThisMonth,
-          req.maxAmountRequired
-        );
-        if (!budgetCheck.allowed) {
+        if (outcome.status === "skipped") {
           const skipStep: AgentStep = {
             id: `pay_${svcId}`,
-            label: "x402 PAYMENT",
-            description: `Budget constraint: ${budgetCheck.reason}`,
+            label: stepLabel,
+            description: outcome.reason ?? "Skipped",
             status: "skipped",
             completedAt: Date.now(),
           };
@@ -249,13 +333,11 @@ export class NexumAgent {
           continue;
         }
 
-        // 3. Authorize
-        const auth = await createAuthorization(this.wallet, req);
-        if (!auth.success || !auth.xPayment) {
+        if (outcome.status === "error") {
           const errStep: AgentStep = {
             id: `pay_${svcId}`,
-            label: "x402 PAYMENT",
-            description: `Authorization failed: ${auth.error}`,
+            label: stepLabel,
+            description: outcome.reason ?? "Payment error",
             status: "error",
             completedAt: Date.now(),
           };
@@ -264,76 +346,46 @@ export class NexumAgent {
           continue;
         }
 
-        this.emit({
-          type: "payment_start",
-          runId,
-          payment: {
-            serviceId: svcId,
-            serviceName: svcName,
-            amount: req.maxAmountRequired,
-            amountDisplay: auth.amountDisplay,
-            payTo: req.payTo,
-            status: "authorized",
-          },
-          timestamp: Date.now(),
-        });
+        // Paid successfully.
+        if (outcome.payment) payments.push(outcome.payment);
+        if (outcome.attestation) attestations.push(outcome.attestation);
+        if (outcome.payment) {
+          const amt = outcome.payment.amount;
+          if (amt && /^\d+$/.test(amt)) totalSpend += BigInt(amt);
+          this.subscriptions.recordCall(svcId, amt ?? "0");
+        }
 
-        // 4. Call with payment
-        const callResult = await callWithPayment(svcEndpoint, auth.xPayment, params);
-
-        // 5. Settle
-        const settle = await settleViaFacilitator(auth.xPayment);
-
-        // 6. Update budget
-        this.budget = updateBudget(this.budget, req.maxAmountRequired);
-        totalSpend += BigInt(req.maxAmountRequired);
-        this.subscriptions.recordCall(svcId, req.maxAmountRequired);
-
-        // 7. Write payment attestation
-        const payAttest = await writeAttestation(this.wallet, {
-          runId,
-          type: "payment",
-          contentHash: hashContent(auth.xPayment + svcId),
-          metadata: `Paid ${svcName}: ${auth.amountDisplay}`,
-        });
-        attestations.push(payAttest);
-
-        const payRecord = buildPaymentRecord({
-          runId,
-          serviceId: svcId,
-          serviceName: svcName,
-          amount: req.maxAmountRequired,
-          decimals: 18,
-          token: "KITE",
-          payTo: req.payTo,
-          txHash: settle.txHash ?? payAttest.txHash,
-          explorerUrl: payAttest.explorerUrl,
-        });
-        payments.push(payRecord);
+        const summary =
+          driver.mode === "passport"
+            ? `Paid ${outcome.amountDisplay ?? ""} to ${svcName} via Kite Passport · settled on Kite`
+            : `Paid ${outcome.amountDisplay ?? ""} to ${svcName} · ${outcome.data ? "Data received" : "Simulated"} · settled on Kite`;
 
         const payStep: AgentStep = {
           id: `pay_${svcId}`,
-          label: "x402 PAYMENT",
-          description: `Paid ${auth.amountDisplay} to ${svcName} · ${callResult.success ? "Data received" : "Simulated"} · Settled on Kite`,
+          label: stepLabel,
+          description: summary,
           status: "success",
           completedAt: Date.now(),
-          txHash: payAttest.txHash,
-          explorerUrl: payAttest.explorerUrl,
+          txHash: outcome.payment?.txHash ?? outcome.attestation?.txHash,
+          explorerUrl: outcome.payment?.explorerUrl ?? outcome.attestation?.explorerUrl,
           data: {
-            amount: auth.amountDisplay,
-            payTo: req.payTo,
-            serviceData: callResult.data,
-            settleTxHash: settle.txHash,
+            amount: outcome.amountDisplay,
+            payTo: outcome.payment?.payTo,
+            serviceData: outcome.data,
+            origin: outcome.payment?.origin,
+            sessionId: outcome.payment?.sessionId,
           },
         };
         addStep(payStep);
         this.emitStep(runId, payStep, "step_complete");
-        this.emit({
-          type: "payment_complete",
-          runId,
-          payment: payRecord,
-          timestamp: Date.now(),
-        });
+        if (outcome.payment) {
+          this.emit({
+            type: "payment_complete",
+            runId,
+            payment: outcome.payment,
+            timestamp: Date.now(),
+          });
+        }
       }
 
       // ── STEP 4: AI Research with Claude ─────────────────────────────────
@@ -377,7 +429,7 @@ export class NexumAgent {
         runId,
         type: "task_complete",
         contentHash: resultHash,
-        metadata: `Spent: ${totalSpend} · Services: ${payments.length} · Task: ${task.input.slice(0, 60)}`,
+        metadata: `Mode: ${driver.mode} · Services: ${payments.length} · Task: ${task.input.slice(0, 60)}`,
       });
       attestations.push(finalAttest);
 
@@ -394,13 +446,13 @@ export class NexumAgent {
           totalSpend: totalSpend.toString(),
           servicesUsed: payments.length,
           attestations: attestations.length,
+          paymentMode: driver.mode,
         },
       };
       addStep(settleStep);
       this.emitStep(runId, settleStep, "step_complete");
       this.emit({ type: "attestation", runId, attestation: finalAttest, timestamp: Date.now() });
 
-      // ── Complete ────────────────────────────────────────────────────────
       run.result = researchResult;
       run.status = "complete";
       run.completedAt = Date.now();
@@ -414,8 +466,9 @@ export class NexumAgent {
           totalSpend: totalSpend.toString(),
           paymentsCount: payments.length,
           attestationsCount: attestations.length,
-          attestationUrl: finalAttest.explorerUrl,
+          attestationUrl: finalAttest.explorerUrl ?? "",
           durationMs: Date.now() - run.startedAt,
+          paymentMode: driver.mode,
         },
         timestamp: Date.now(),
       });
@@ -444,7 +497,7 @@ async function runClaudeTask(
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return `[Demo mode — no ANTHROPIC_API_KEY] Task: "${task}". Agent autonomously called ${serviceCount} paid service(s) via x402 on Kite chain, settled USDT payments, and anchored cryptographic attestations on Kite testnet. In production, Claude would synthesize all acquired data into a full research brief here.`;
+    return `[Demo mode — no ANTHROPIC_API_KEY] Task: "${task}". Agent autonomously called ${serviceCount} paid service(s) via x402 on Kite chain, settled USDC payments, and anchored cryptographic attestations on Kite testnet. In production, Claude would synthesize all acquired data into a full research brief here.`;
   }
 
   try {

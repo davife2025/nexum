@@ -12,6 +12,7 @@
   "dependencies": {
     "@nexum/kite": "*",
     "@nexum/x402": "*",
+    "@nexum/passport": "*",
     "@nexum/types": "*",
     "ethers": "^6.13.1"
   },

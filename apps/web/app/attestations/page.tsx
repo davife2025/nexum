@@ -45,12 +45,10 @@ export default function AttestationsPage() {
   const exportCSV = () => {
     const headers = ["id","runId","type","contentHash","txHash","status","timestamp","metadata"];
     const rows = attestations.map(a => headers.map(h => {
-      const v = (a as Record<string,unknown>)[h];
+      const v = (a as unknown as Record<string,unknown>)[h];
       return typeof v === "string" ? `"${v.replace(/"/g,"'")}"` : String(v ?? "");
     }).join(","));
-    const blob = new Blob([headers.join(",") + "
-" + rows.join("
-")], { type: "text/csv" });
+    const blob = new Blob([headers.join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url; link.download = `nexum-attestations-${Date.now()}.csv`;

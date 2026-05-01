@@ -36,7 +36,7 @@ nexum/
 │   │   │   │       └── [id]/page.tsx  Run detail (/app/runs/:id)
 │   │   │   ├── marketplace/page.tsx  Service registry (/marketplace)
 │   │   │   ├── history/page.tsx      Spend dashboard (/history)
-│   │   │   ├── agent/page.tsx        Wallet + policy (/agent)
+│   │   │   ├── agent/page.tsx        Wallet + Kite Passport + policy (/agent)
 │   │   │   ├── attestations/page.tsx On-chain proof explorer (/attestations)
 │   │   │   ├── providers/page.tsx    Service provider onboarding (/providers)
 │   │   │   ├── components/
@@ -60,18 +60,26 @@ nexum/
 │   │   │       ├── history/export/route.ts GET  — CSV download of all payments
 │   │   │       ├── attestations/route.ts  GET  — on-chain attestation timeline
 │   │   │       ├── services/route.ts      GET  — service registry with filtering
-│   │   │       └── search/route.ts        GET  — full-text search across runs/payments/attestations
+│   │   │       ├── search/route.ts        GET  — full-text search across runs/payments/attestations
+│   │   │       └── passport/              Kite Agent Passport integration
+│   │   │           ├── status/route.ts        GET  — connection + sessions snapshot
+│   │   │           ├── connect/route.ts       POST — signup / login / disconnect
+│   │   │           ├── sessions/route.ts      GET/POST — list / create sessions
+│   │   │           └── sessions/[id]/route.ts GET/DELETE — fetch / revoke a session
 │   │   └── lib/
-│   │       └── store.ts             In-memory run store (global singleton, seeds demo data, prunes to 100 runs)
+│   │       ├── store.ts             In-memory run store (global singleton, seeds demo data, prunes to 100 runs)
+│   │       └── passport-store.ts    In-memory Kite Passport state (connection + sessions)
 │   └── agent/                       Standalone CLI agent (Node.js)
 │       └── src/
-│           ├── agent.ts             Autonomous commerce executor
+│           ├── agent.ts             Autonomous commerce executor (driver-based)
+│           ├── payment-driver.ts    Passport vs. local x402 payment routing
 │           ├── commerce.ts          Service catalog, discovery, budget, subscriptions
 │           └── index.ts             CLI entry point (colorful terminal output)
 └── packages/
     ├── types/src/index.ts           All shared TypeScript interfaces
     ├── kite/src/index.ts            Kite chain SDK (ethers.js v6)
-    └── x402/src/index.ts           x402 payment protocol handler
+    ├── x402/src/index.ts            x402 payment protocol handler
+    └── passport/src/index.ts        Kite Agent Passport HTTP client
 ```
 
 ---
@@ -179,6 +187,12 @@ Set two environment variables in the Vercel dashboard:
 | `POST` | `/api/providers` | Submit a service for marketplace review |
 | `GET` | `/api/providers` | List pending service registrations |
 | `GET` | `/api/status` | Live ping of all x402 service endpoints |
+| `GET`  | `/api/passport/status`         | Passport connection + sessions snapshot |
+| `POST` | `/api/passport/connect`        | Signup / login / disconnect (step-discriminated) |
+| `GET`  | `/api/passport/sessions`       | List sessions |
+| `POST` | `/api/passport/sessions`       | Create a new spending session |
+| `GET`  | `/api/passport/sessions/:id`   | Fetch session detail |
+| `DELETE` | `/api/passport/sessions/:id` | Revoke an active session |
 
 ---
 
@@ -231,6 +245,71 @@ const settle = await settleViaFacilitator(auth.xPayment);
 
 ---
 
+## Kite Agent Passport
+
+Nexum supports two payment paths. The **local** path is the demo default — the agent holds an ephemeral key and signs x402 authorizations itself. The **Passport** path replaces that key with a user-bound Account Abstraction wallet, with payments constrained by a session the user signs with a passkey.
+
+### When Passport activates
+
+```
+KITE_PASSPORT_BASE_URL  // public Passport API origin
+KITE_PASSPORT_API_KEY   // issued from the Passport dashboard
+```
+
+When both are set, the `/api/passport/*` routes proxy real Passport calls. With neither set, the integration runs in **simulate** mode — the UI flows are end-to-end, sessions auto-approve after 1.2s, and the on-chain settlement still goes through the Pieverse facilitator. This lets you build and demo against a stable contract without a live Passport account.
+
+The agent then chooses its driver per run: if there's an active Passport session in the store, every paid service call goes through `passport.execute(sessionId, url, params)`. Otherwise the agent falls back to the local x402 flow. Attestations always go on-chain from the agent's local wallet — that's the agent's audit trail and is independent of payment origin.
+
+### Lifecycle
+
+```
+1. signup_init         → email + 8-char code sent
+2. signup_verify       → API key + AA wallet returned, agent registered
+3. session create      → request a budget (max-per-tx, max-total, TTL)
+4. user passkey approve → session goes from pending_approval → active
+5. agent runs          → each paid call signs a delegation under the session
+6. session expires/exhausts → agent must request a new one
+```
+
+### Passport REST surface used
+
+| Endpoint                           | Used for                                |
+|------------------------------------|-----------------------------------------|
+| `POST /v1/signup/init`             | Begin signup                            |
+| `POST /v1/signup/exchange`         | Exchange link token for API key         |
+| `POST /v1/login/init`              | Returning-user OTP                      |
+| `POST /v1/login/verify`            | Verify OTP                              |
+| `GET  /v1/me`                      | Resolve user / agent / wallet / balance |
+| `POST /v1/agents/register`         | Register a new agent                    |
+| `POST /v1/sessions`                | Create a spending session               |
+| `GET  /v1/sessions/:id`            | Poll session status / fetch detail      |
+| `POST /v1/sessions/:id/revoke`     | Revoke an active session                |
+| `POST /v1/sessions/execute`        | Execute a paid HTTP request             |
+
+> **Note:** Kite has formalised the `kpass` CLI surface in [docs.gokite.ai/kite-agent-passport/cli-reference](https://docs.gokite.ai/kite-agent-passport/cli-reference) but has not yet published a public REST spec. The endpoint paths above are best-fit inferences — each is marked with a `// TODO(passport-api): confirm` comment in `packages/passport/src/index.ts` and is easy to swap once the spec firms up. The `simulate` mode keeps the UI/CLI usable in the meantime.
+
+### Driver abstraction
+
+The agent uses a driver pattern (`apps/agent/src/payment-driver.ts`) that picks between Passport and local x402 once per run:
+
+```typescript
+const driver = makePaymentDriver({
+  wallet,                                  // for attestations
+  budget,                                  // local-mode budget enforcement
+  session: activePassportSession,          // optional: pins to Passport
+  passport: passportClient,                // optional: required with session
+});
+
+const outcome = await driver.pay({         // single call, both modes
+  runId, serviceId, serviceName, endpoint, params, fallbackRequirement,
+});
+// → { status, payment, attestation, data, amountDisplay }
+```
+
+`PaymentRecord.origin` is now `"passport" | "local"` and `PaymentRecord.sessionId` is set on Passport-signed payments — the `/history` ledger and `/app/runs/:id` detail can both surface which session paid for what.
+
+---
+
 ## Shared Packages
 
 ### `@nexum/types`
@@ -252,6 +331,16 @@ x402 protocol handler:
 - `callWithPayment(url, xPayment, params)` — call with X-Payment header
 - `settleViaFacilitator(xPayment)` — settle via Pieverse on Kite chain
 - `executeX402Flow(wallet, url, params)` — full end-to-end helper
+
+### `@nexum/passport`
+Kite Agent Passport client:
+- `PassportClient` — typed wrapper for the Passport REST surface
+- `getPassportClient()` — env-configured shared instance
+- Auth: `signupInit`, `signupExchange`, `loginInit`, `loginVerify`, `me`
+- Agents: `registerAgent`
+- Sessions: `createSession`, `getSession`, `listSessions`, `revokeSession`
+- Execute: `execute({ sessionId, url, method, query, body })` — runs the full x402 dance under the session
+- `client.isSimulated` — `true` when no `KITE_PASSPORT_BASE_URL` is configured (demo mode)
 
 
 

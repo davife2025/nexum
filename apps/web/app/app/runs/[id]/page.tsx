@@ -130,17 +130,32 @@ export default function RunDetail() {
           </div>
 
           {/* Meta grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-            {[
-              { label: "AGENT", value: run.agentAddress ? `${run.agentAddress.slice(0, 8)}…${run.agentAddress.slice(-6)}` : "—" },
-              { label: "LOCATION", value: run.location },
-              { label: "DURATION", value: run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : "—" },
-              { label: "PAYMENTS", value: `${run.payments.length}` },
-              { label: "SPEND", value: `${totalPaid.toFixed(4)} KITE` },
-            ].map(({ label, value }) => (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
+            {(() => {
+              const passportPayments = run.payments.filter(p => p.origin === "passport").length;
+              const localPayments = run.payments.filter(p => p.origin === "local").length;
+              const modeLabel =
+                passportPayments > 0 && localPayments === 0 ? "Passport"
+                : localPayments > 0 && passportPayments === 0 ? "Local"
+                : passportPayments + localPayments === 0 ? "—"
+                : "Mixed";
+              const modeColor =
+                modeLabel === "Passport" ? "#00E5C9"
+                : modeLabel === "Local" ? "#7B5EFF"
+                : modeLabel === "Mixed" ? "#FFB300"
+                : "#4A7090";
+              return [
+                { label: "AGENT", value: run.agentAddress ? `${run.agentAddress.slice(0, 8)}…${run.agentAddress.slice(-6)}` : "—", color: "#B8D4E8" },
+                { label: "LOCATION", value: run.location, color: "#B8D4E8" },
+                { label: "DURATION", value: run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : "—", color: "#B8D4E8" },
+                { label: "PAYMENTS", value: `${run.payments.length}`, color: "#B8D4E8" },
+                { label: "SPEND", value: `${totalPaid.toFixed(4)} KITE`, color: "#B8D4E8" },
+                { label: "PAID VIA", value: modeLabel, color: modeColor },
+              ];
+            })().map(({ label, value, color }) => (
               <div key={label} style={{ background: "#0F172A", border: "1px solid #1E3A5F", borderRadius: 8, padding: "10px 12px" }}>
                 <div style={{ fontSize: 10, ...S.mono, color: "#4A7090", marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 12, ...S.mono, color: "#B8D4E8", fontWeight: 500 }}>{value}</div>
+                <div style={{ fontSize: 12, ...S.mono, color, fontWeight: 500 }}>{value}</div>
               </div>
             ))}
           </div>
@@ -161,12 +176,35 @@ export default function RunDetail() {
                     .reduce((s, x) => s + parseFloat(x.amountDisplay?.split(" ")[0] ?? "0"), 0);
                   return (
                     <div key={p.id} style={{ background: "#0F172A", border: "1px solid rgba(0,229,201,0.2)", borderRadius: 8, padding: "12px 14px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                        <div>
-                          <div style={{ fontSize: 13, color: "#F8FAFC", fontWeight: 500, marginBottom: 2 }}>{p.serviceName}</div>
-                          <div style={{ fontSize: 10, ...S.mono, color: "#4A7090" }}>Payment {i + 1} of {run.payments.length} · cumulative: {runningTotal.toFixed(4)} KITE</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, gap: 10 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 13, color: "#F8FAFC", fontWeight: 500 }}>{p.serviceName}</span>
+                            {p.origin === "passport" && (
+                              <span title={p.sessionId ? `Kite Passport · session ${p.sessionId}` : "Paid via Kite Passport"}
+                                style={{ fontSize: 9, ...S.mono, color: "#00E5C9", letterSpacing: ".06em",
+                                  padding: "1px 6px", border: "1px solid rgba(0,229,201,0.35)", borderRadius: 3,
+                                  background: "rgba(0,229,201,0.06)" }}>
+                                ⛨ PASSPORT
+                              </span>
+                            )}
+                            {p.origin === "local" && (
+                              <span title="Paid by local agent wallet (legacy x402)"
+                                style={{ fontSize: 9, ...S.mono, color: "#7B5EFF", letterSpacing: ".06em",
+                                  padding: "1px 6px", border: "1px solid rgba(123,94,255,0.35)", borderRadius: 3,
+                                  background: "rgba(123,94,255,0.06)" }}>
+                                ◈ LOCAL
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 10, ...S.mono, color: "#4A7090" }}>
+                            Payment {i + 1} of {run.payments.length} · cumulative: {runningTotal.toFixed(4)} {p.token ?? "KITE"}
+                            {p.sessionId && (
+                              <> · <span style={{ color: "#00E5C9" }}>{p.sessionId.slice(0, 14)}…</span></>
+                            )}
+                          </div>
                         </div>
-                        <div style={{ textAlign: "right" }}>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
                           <div style={{ fontSize: 13, ...S.mono, color: "#00E5C9", marginBottom: 2 }}>{p.amountDisplay}</div>
                           <div style={{ fontSize: 10, ...S.mono, color: "#7B5EFF" }}>✓ {p.status}</div>
                         </div>

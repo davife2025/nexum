@@ -26,6 +26,7 @@ interface RunState {
   status: "idle" | "running" | "complete" | "error";
   startedAt: number;
   completedAt?: number;
+  durationMs?: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -166,13 +167,15 @@ function NexumDashboardInner() {
   const handleEvent = useCallback((event: AgentEvent) => {
     // Side-effects (toasts) — run outside setRun to avoid stale closure issues
     if (event.type === "run_complete") {
-      const meta = event.meta as Record<string, string> | undefined;
+      const meta = event.meta as Record<string, string | number | undefined> | undefined;
       const spendStr = meta?.totalSpend ? ` · ${meta.totalSpend}` : "";
+      const paymentsCount = Number(meta?.paymentsCount ?? 0);
+      const attestationsCount = Number(meta?.attestationsCount ?? 0);
       toastRef.current({
         kind: "success",
         title: "Run complete",
-        body: `${meta?.paymentsCount ?? 0} payment${meta?.paymentsCount !== 1 ? "s" : ""}${spendStr} · ${meta?.attestationsCount ?? 0} attestations`,
-        href: meta?.attestationUrl,
+        body: `${paymentsCount} payment${paymentsCount !== 1 ? "s" : ""}${spendStr} · ${attestationsCount} attestations`,
+        href: typeof meta?.attestationUrl === "string" ? meta.attestationUrl : undefined,
         duration: 7000,
       });
     }

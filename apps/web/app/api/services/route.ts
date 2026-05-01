@@ -139,6 +139,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     services,
     total: services.length,
-    categories: [...new Set(SERVICES.map((s) => s.category))],
+    categories: Array.from(new Set(SERVICES.map((s) => s.category))),
   });
 }

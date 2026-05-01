@@ -19,6 +19,11 @@ import {
 } from "@nexum/x402";
 import type { AgentEvent, AgentStep, PaymentRecord, Attestation } from "@nexum/types";
 import { store } from "../../../lib/store";
+import {
+  getClient as getPassportClient,
+  activeSession as activePassportSession,
+  recordSpend as recordPassportSpend,
+} from "../../../lib/passport-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,13 +66,13 @@ const SERVICE_CATALOG = [
   },
 ];
 
-const DEFAULT_POLICY = {
+const DEFAULT_POLICY: import("@nexum/types").SpendingPolicy = {
   id: "nexum-default",
   name: "Nexum Commerce Policy",
   maxPerCall: "50000000000000000000",
   maxPerDay: "500000000000000000000",
   maxPerMonth: "5000000000000000000000",
-  allowedCategories: ["data", "weather", "finance", "ai", "compute", "identity", "other"] as const,
+  allowedCategories: ["data", "weather", "finance", "ai", "compute", "identity", "other"],
 };
 
 function encode(event: AgentEvent): string {
@@ -155,19 +160,116 @@ export async function POST(req: NextRequest) {
         });
 
         // ── x402 Payments ────────────────────────────────────────────────
+        const passportSession = activePassportSession();
+        const passport = getPassportClient();
+        const usingPassport = !!passportSession;
+
+        if (usingPassport) {
+          send({
+            type: "step_update", runId,
+            step: {
+              id: "discover", label: "PASSPORT MODE",
+              description: `Active Kite Passport session ${passportSession!.id.slice(0, 14)}… (budget ${passportSession!.totalSpent} of ${passportSession!.maxTotalAmount})`,
+              status: "running",
+            },
+            timestamp: Date.now(),
+          });
+        }
+
         for (const svc of services) {
           await pause(350);
 
           const isLive = svc.id === "kite-weather";
           const liveEndpoint = KITE_X402_SERVICES[0].endpoint;
           const endpoint = isLive ? liveEndpoint : svc.endpoint;
-          const params = isLive ? { location } : {};
+          const params: Record<string, string> = isLive ? { location: String(location) } : {};
+
+          const stepLabel = usingPassport ? "PASSPORT PAYMENT" : "x402 PAYMENT";
 
           send({
             type: "step_start", runId,
-            step: { id: `pay_${svc.id}`, label: "x402 PAYMENT", description: `Calling ${svc.name}${isLive ? ` (${location})` : ""} — probing for 402...`, status: "running" },
+            step: { id: `pay_${svc.id}`, label: stepLabel, description: `Calling ${svc.name}${isLive ? ` (${location})` : ""}${usingPassport ? " via Kite Passport" : " — probing for 402"}...`, status: "running" },
             timestamp: Date.now(),
           });
+
+          // ── Branch A: Kite Passport ────────────────────────────────────
+          if (usingPassport) {
+            try {
+              const result = await passport.execute({
+                sessionId: passportSession!.id,
+                url: endpoint,
+                method: "GET",
+                query: params,
+              });
+
+              const amountDisplay = result.amountDisplay ?? "1.00 USDC";
+              recordPassportSpend(passportSession!.id, amountDisplay);
+
+              // Attestation for the agent action — separate from Passport's
+              // payment proof, anchored on Kite by the agent wallet.
+              const payAttest = await writeAttestation(wallet, {
+                runId, type: "payment",
+                contentHash: hashContent(`passport:${passportSession!.id}:${svc.id}:${result.txHash ?? ""}`),
+                metadata: `Passport ${amountDisplay} → ${svc.name}`,
+              });
+              attestations.push(payAttest);
+
+              const payRecord: PaymentRecord = {
+                id: `pay_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                runId,
+                serviceId: svc.id,
+                serviceName: svc.name,
+                amount: result.delegation?.amount ?? "0",
+                amountDisplay,
+                token: passportSession!.asset,
+                payTo: result.payee ?? svc.payTo,
+                txHash: result.txHash ?? payAttest.txHash,
+                explorerUrl: result.txHash
+                  ? `https://testnet.kitescan.ai/tx/${result.txHash}`
+                  : payAttest.explorerUrl,
+                status: result.txHash ? "settled" : "authorized",
+                timestamp: Date.now(),
+                origin: "passport",
+                sessionId: passportSession!.id,
+              };
+              payments.push(payRecord);
+              store.addPayment(runId, payRecord);
+              if (payAttest.txHash) store.addAttestation(runId, payAttest);
+
+              send({ type: "payment_start", runId, payment: { ...payRecord, status: "authorized" }, timestamp: Date.now() });
+
+              send({
+                type: "step_complete", runId,
+                step: {
+                  id: `pay_${svc.id}`, label: stepLabel,
+                  description: `${amountDisplay} paid to ${svc.name} via Kite Passport · session ${passportSession!.id.slice(0, 12)}… · settled on Kite`,
+                  status: "success",
+                  txHash: payRecord.txHash,
+                  explorerUrl: payRecord.explorerUrl,
+                  data: {
+                    amount: amountDisplay,
+                    sessionId: passportSession!.id,
+                    serviceData: result.data,
+                    origin: "passport",
+                  },
+                },
+                payment: payRecord,
+                timestamp: Date.now(),
+              });
+              send({ type: "payment_complete", runId, payment: payRecord, timestamp: Date.now() });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              send({
+                type: "step_error", runId,
+                step: { id: `pay_${svc.id}`, label: stepLabel, description: `Passport execute failed: ${msg}`, status: "error" },
+                error: msg,
+                timestamp: Date.now(),
+              });
+            }
+            continue; // next service
+          }
+
+          // ── Branch B: Local x402 (legacy / fallback) ─────────────────────
 
           // Budget check
           const budget = checkBudget(DEFAULT_POLICY, spentToday, spentMonth, svc.pricePerCall);
@@ -313,6 +415,8 @@ export async function POST(req: NextRequest) {
             attestationUrl: finalAttest.explorerUrl,
             agentAddress: wallet.address,
             durationMs,
+            paymentMode: usingPassport ? "passport" : "local",
+            sessionId: passportSession?.id,
           },
           timestamp: Date.now(),
         });

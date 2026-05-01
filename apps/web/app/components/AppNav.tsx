@@ -14,9 +14,17 @@ const NAV_LINKS = [
   { label: "Providers",    href: "/providers" },
 ];
 
+interface PassportPing {
+  status: string;
+  agentId?: string;
+  activeSession: boolean;
+  simulate: boolean;
+}
+
 export default function AppNav() {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [passport, setPassport] = useState<PassportPing | null>(null);
 
   // Close drawer on route change
   useEffect(() => { setMobileOpen(false); }, [path]);
@@ -26,6 +34,28 @@ export default function AppNav() {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
+
+  // Live passport indicator. Skip on /agent (that page has its own poller).
+  useEffect(() => {
+    let cancelled = false;
+    const ping = async () => {
+      try {
+        const res = await fetch("/api/passport/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setPassport({
+          status: data.connection?.status ?? "disconnected",
+          agentId: data.connection?.agentId,
+          activeSession: !!data.activeSessionId,
+          simulate: !!data.simulate,
+        });
+      } catch {}
+    };
+    ping();
+    const t = setInterval(ping, 20000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
 
   function isActive(href: string) {
     if (href === "/app") return path === "/app";
@@ -80,6 +110,27 @@ export default function AppNav() {
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#00E5C9", boxShadow: "0 0 8px #00E5C9", display: "inline-block" }} />
               KITE
             </span>
+            {/* Passport status — desktop only */}
+            {passport && passport.status === "connected" && (
+              <Link href="/agent" title={passport.activeSession ? `Kite Passport · session active${passport.simulate ? " (simulate)" : ""}` : `Kite Passport connected${passport.simulate ? " (simulate)" : ""} · no active session`}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  fontSize: 11, ...S.mono,
+                  color: passport.activeSession ? "#00E5C9" : "#4A7090",
+                  textDecoration: "none", whiteSpace: "nowrap",
+                  border: `1px solid ${passport.activeSession ? "rgba(0,229,201,0.35)" : "#1E3A5F"}`,
+                  background: passport.activeSession ? "rgba(0,229,201,0.06)" : "transparent",
+                  borderRadius: 4, padding: "2px 8px",
+                }}
+                className="hidden-mobile">
+                <span style={{
+                  width: 5, height: 5, borderRadius: "50%",
+                  background: passport.activeSession ? "#00E5C9" : "#4A7090",
+                  boxShadow: passport.activeSession ? "0 0 6px #00E5C9" : "none",
+                }} />
+                ⛨ PASSPORT{passport.simulate ? " (sim)" : ""}
+              </Link>
+            )}
             <a href="https://testnet.kitescan.ai" target="_blank" rel="noopener noreferrer"
               style={{ fontSize: 11, ...S.mono, color: "#4A7090", textDecoration: "none", whiteSpace: "nowrap" }}
               className="hidden-mobile">

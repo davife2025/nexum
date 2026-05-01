@@ -91,6 +91,10 @@ export interface PaymentRecord {
   status: "pending" | "authorized" | "settled" | "failed";
   timestamp: number;
   settlementTxHash?: string;
+  /** "passport" if signed by Kite Passport session, "local" if by ephemeral wallet */
+  origin?: "passport" | "local";
+  /** Passport session ID if origin === "passport" */
+  sessionId?: string;
 }
 
 // ── Subscription Management ───────────────────────────────────────────────────
@@ -128,6 +132,102 @@ export interface BudgetState {
   remainingDay: string;
   remainingMonth: string;
   lastUpdated: number;
+}
+
+// ── Kite Agent Passport ───────────────────────────────────────────────────────
+//
+// Passport replaces the locally-held EVM key with a user-bound Account
+// Abstraction wallet. Every payment is constrained by a Session (master
+// budget) which the user signs with a passkey on agentpassport.ai.
+//
+// Lifecycle:
+//   user signs up → agent registered → session created → user approves
+//   passkey → agent executes paid requests inside session envelope.
+
+export type PassportConnectionStatus =
+  | "disconnected"      // no passport credentials present
+  | "pending_signup"    // signup initiated, awaiting verification email
+  | "pending_login"     // login initiated, awaiting OTP code
+  | "connected"         // authenticated, agent registered
+  | "error";
+
+export interface KitePassport {
+  /** Passport account email (unique per user) */
+  email?: string;
+  /** Registered agent ID (from kpass agent:register) */
+  agentId?: string;
+  /** AA wallet address — the payer for x402 calls */
+  walletAddress?: string;
+  /** USDC balance on Kite chain (display string) */
+  usdcBalance?: string;
+  /** Current connection state */
+  status: PassportConnectionStatus;
+  /** ISO timestamp of last sync */
+  lastSyncedAt?: number;
+  /** Error message if status === "error" */
+  error?: string;
+}
+
+export type SessionStatus =
+  | "pending_approval"  // request sent, awaiting passkey
+  | "active"            // approved and within budget/TTL
+  | "exhausted"         // total budget consumed
+  | "expired"           // TTL elapsed
+  | "revoked"           // user revoked manually
+  | "rejected";         // user denied passkey
+
+export type PaymentApproach = "x402_http" | "mpp";
+
+export interface PassportSession {
+  /** Session ID assigned by Passport backend */
+  id: string;
+  /** Request ID returned at create time, used while pending */
+  requestId?: string;
+  /** Owning agent ID */
+  agentId: string;
+  /** Human-readable description shown in passkey prompt */
+  taskSummary: string;
+  /** Max spend per single tx (display, e.g. "2.00 USDC") */
+  maxAmountPerTx: string;
+  /** Max total spend across the session (display) */
+  maxTotalAmount: string;
+  /** Total spent so far against this session (display) */
+  totalSpent: string;
+  /** Asset symbol — currently always USDC on Kite */
+  asset: string;
+  /** Payment protocol */
+  paymentApproach: PaymentApproach;
+  /** Session lifetime in seconds */
+  ttlSeconds: number;
+  /** Unix ms timestamp when session expires */
+  expiresAt: number;
+  /** Current state */
+  status: SessionStatus;
+  /** Number of paid calls made under this session */
+  callCount: number;
+  /** When the session was created */
+  createdAt: number;
+  /** When the user approved (if applicable) */
+  approvedAt?: number;
+}
+
+export interface PassportDelegation {
+  /** Delegation ID */
+  id: string;
+  /** Parent session */
+  sessionId: string;
+  /** Service URL the delegation authorizes payment to */
+  resource: string;
+  /** Exact amount this delegation permits */
+  amount: string;
+  /** Display amount (e.g. "1.00 USDC") */
+  amountDisplay: string;
+  /** Recipient wallet (service payTo) */
+  payee: string;
+  /** When created */
+  createdAt: number;
+  /** Resulting on-chain tx hash if executed */
+  txHash?: string;
 }
 
 // ── On-Chain Attestation ──────────────────────────────────────────────────────

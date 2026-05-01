@@ -2,10 +2,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Nexum Agent — CLI Entry Point
 // Run: ANTHROPIC_API_KEY=... npx tsx src/index.ts "research DeFi yields"
+//
+// Optional Kite Passport mode:
+//   KITE_PASSPORT_BASE_URL=... KITE_PASSPORT_API_KEY=... \
+//     KITE_PASSPORT_SESSION_ID=sess_... \
+//     ANTHROPIC_API_KEY=... npx tsx src/index.ts "..."
+//
+// If KITE_PASSPORT_API_KEY + KITE_PASSPORT_SESSION_ID are present, the
+// agent routes payments through Kite Passport. Otherwise it falls back
+// to the local x402 driver.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NexumAgent } from "./agent.js";
-import type { AgentEvent } from "@nexum/types";
+import { PassportClient } from "@nexum/passport";
+import type { AgentEvent, PassportSession } from "@nexum/types";
 
 // ── ANSI colors for terminal output ──────────────────────────────────────────
 const c = {
@@ -197,10 +207,41 @@ ${c.bold}CHAIN${c.reset}
   console.log(`║           NEXUM — Agentic Commerce on Kite           ║`);
   console.log(`╚══════════════════════════════════════════════════════╝${c.reset}\n`);
 
-  const agent = new NexumAgent(process.env.AGENT_PRIVATE_KEY, handleEvent);
+  // Optional Kite Passport bootstrap.
+  let passport: PassportClient | undefined;
+  let passportSession: PassportSession | undefined;
+  const passportApiKey = process.env.KITE_PASSPORT_API_KEY;
+  const passportSessionId = process.env.KITE_PASSPORT_SESSION_ID;
+  if (passportApiKey) {
+    passport = new PassportClient({
+      baseUrl: process.env.KITE_PASSPORT_BASE_URL,
+      apiKey: passportApiKey,
+    });
+    if (passportSessionId) {
+      try {
+        passportSession = await passport.getSession(passportSessionId);
+        log("◈ PASSPORT", c.cyan, `Session ${passportSession.id} (${passportSession.status})`);
+        if (passportSession.status !== "active") {
+          log("  WARN", c.yellow, `Session not active — falling back to local x402.`);
+          passportSession = undefined;
+        }
+      } catch (err) {
+        log("  WARN", c.yellow, `Could not load session ${passportSessionId}: ${err}. Using local x402.`);
+        passportSession = undefined;
+      }
+    }
+  }
+
+  const agent = new NexumAgent({
+    privateKey: process.env.AGENT_PRIVATE_KEY,
+    onEvent: handleEvent,
+    passport,
+    passportSession,
+  });
 
   log("◈ IDENTITY", c.cyan, agent.address);
   log("  NETWORK", c.dim, "Kite Testnet (Chain ID: 2368)");
+  log("  MODE", c.dim, agent.usingPassport ? "Kite Passport (user-bound payments)" : "Local x402 (ephemeral wallet)");
   log("  TASK", c.white, task);
   console.log();
 

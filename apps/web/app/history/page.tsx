@@ -13,7 +13,19 @@ interface Payment {
   origin?: "passport" | "local";
   sessionId?: string;
 }
-interface Summary { totalSpend: string; spentToday: string; spentMonth: string; count: number; }
+interface Summary {
+  totalSpend: string;
+  spentToday: string;
+  spentMonth: string;
+  count: number;
+  origin?: {
+    passportCount: number;
+    localCount: number;
+    passportSpend: string;
+    localSpend: string;
+    uniqueSessions: number;
+  };
+}
 
 function timeAgo(ts: number) {
   const d = Date.now() - ts;
@@ -32,6 +44,7 @@ export default function History() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"payments"|"overview">("overview");
   const [dateRange, setDateRange] = useState<"7d"|"30d"|"all">("all");
+  const [originFilter, setOriginFilter] = useState<"all"|"passport"|"local">("all");
 
   const load = useCallback(async () => {
     try {
@@ -52,7 +65,14 @@ export default function History() {
   };
 
   const rangeMs = dateRange === "7d" ? 7*86400000 : dateRange === "30d" ? 30*86400000 : Infinity;
-  const filteredPayments = payments.filter(p => Date.now() - p.timestamp <= rangeMs);
+  const filteredPayments = payments
+    .filter(p => Date.now() - p.timestamp <= rangeMs)
+    .filter(p => {
+      if (originFilter === "all") return true;
+      if (originFilter === "passport") return p.origin === "passport";
+      // "local" includes payments without an origin tag (legacy / pre-Passport).
+      return p.origin !== "passport";
+    });
   const spentToday = parseFloat(summary?.spentToday ?? "0");
   const spentMonth = parseFloat(summary?.spentMonth ?? "0");
   const totalSpend = parseFloat(summary?.totalSpend ?? "0");
@@ -108,6 +128,49 @@ export default function History() {
           })}
         </div>
 
+        {/* Passport breakdown — only renders when we have passport activity */}
+        {summary?.origin && summary.origin.passportCount > 0 && (
+          <div style={{ ...S.card, padding:"16px 20px", marginBottom:20, border:"1px solid rgba(0,229,201,0.18)" }}>
+            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:12, gap:8, flexWrap:"wrap" }}>
+              <div style={{ fontSize:11, ...S.mono, color:"#4A7090", letterSpacing:".1em" }}>// PAYMENT ORIGIN</div>
+              <div style={{ fontSize:10, ...S.mono, color:"#4A7090" }}>
+                {summary.origin.uniqueSessions} unique session{summary.origin.uniqueSessions!==1?"s":""} used
+              </div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+              {[
+                {
+                  label:"⛨ KITE PASSPORT",
+                  count: summary.origin.passportCount,
+                  spend: parseFloat(summary.origin.passportSpend),
+                  color:"#00E5C9",
+                },
+                {
+                  label:"◈ LOCAL X402",
+                  count: summary.origin.localCount,
+                  spend: parseFloat(summary.origin.localSpend),
+                  color:"#7B5EFF",
+                },
+              ].map(b => {
+                const totalCount = summary.origin!.passportCount + summary.origin!.localCount;
+                const pct = totalCount>0 ? (b.count / totalCount) * 100 : 0;
+                return (
+                  <div key={b.label}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6, fontSize:11, ...S.mono }}>
+                      <span style={{ color:b.color }}>{b.label}</span>
+                      <span style={{ color:"#B8D4E8" }}>{b.count} payment{b.count!==1?"s":""} · {b.spend.toFixed(2)}</span>
+                    </div>
+                    <div style={{ background:"#0F172A", borderRadius:4, height:5, overflow:"hidden" }}>
+                      <div style={{ width:`${pct}%`, height:"100%", background:b.color, borderRadius:4, transition:"width .6s" }} />
+                    </div>
+                    <div style={{ fontSize:10, ...S.mono, color:"#4A7090", marginTop:4 }}>{pct.toFixed(0)}% of payments</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Spend chart */}
         {payments.length > 0 && (
           <div style={{ marginBottom: 24 }}>
@@ -118,8 +181,8 @@ export default function History() {
         {/* Service status */}
         <ServiceStatusStrip />
 
-        {/* Date range pills */}
-        <div style={{ display:"flex", gap:6, marginBottom:16, alignItems:"center" }}>
+        {/* Filters: date range + origin */}
+        <div style={{ display:"flex", gap:6, marginBottom:16, alignItems:"center", flexWrap:"wrap" }}>
           <span style={{ fontSize:11, ...S.mono, color:"#4A7090" }}>Show:</span>
           {(["7d","30d","all"] as const).map(r => (
             <button key={r} onClick={() => setDateRange(r)}
@@ -127,6 +190,28 @@ export default function History() {
               {r === "all" ? "All time" : `Last ${r}`}
             </button>
           ))}
+          {/* Only show origin filter if there's any passport activity to filter by */}
+          {summary?.origin && summary.origin.passportCount > 0 && (
+            <>
+              <span style={{ fontSize:11, ...S.mono, color:"#4A7090", marginLeft:12 }}>·</span>
+              {(["all","passport","local"] as const).map(o => {
+                const labels = { all:"All", passport:"⛨ Passport", local:"◈ Local" };
+                const colors = { all:"#00E5C9", passport:"#00E5C9", local:"#7B5EFF" };
+                return (
+                  <button key={o} onClick={() => setOriginFilter(o)}
+                    style={{
+                      fontSize:11, ...S.mono, padding:"4px 14px", borderRadius:6,
+                      border:`1px solid ${originFilter===o?colors[o]+"77":"#1E3A5F"}`,
+                      color:originFilter===o?colors[o]:"#4A7090",
+                      background:originFilter===o?colors[o]+"15":"transparent",
+                      cursor:"pointer",
+                    }}>
+                    {labels[o]}
+                  </button>
+                );
+              })}
+            </>
+          )}
           <span style={{ fontSize:11, ...S.mono, color:"#4A7090", marginLeft:8 }}>
             {filteredPayments.length} payment{filteredPayments.length!==1?"s":""}
           </span>

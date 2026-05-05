@@ -148,7 +148,18 @@ export class NexumAgent {
     this.emit({
       type: "run_start",
       runId,
-      agent: this.identity,
+      agent: {
+        ...this.identity,
+        ...(this.usingPassport && this.passportSession && {
+          passport: {
+            sessionId: this.passportSession.id,
+            budget: this.passportSession.maxTotalAmount,
+            spent: this.passportSession.totalSpent,
+            asset: this.passportSession.asset,
+            expiresAt: this.passportSession.expiresAt,
+          },
+        }),
+      },
       timestamp: Date.now(),
     });
 

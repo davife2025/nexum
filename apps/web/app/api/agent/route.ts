@@ -115,18 +115,52 @@ export async function POST(req: NextRequest) {
         const wallet = getWallet(provider, process.env.AGENT_PRIVATE_KEY);
         const identity = buildAgentIdentity(wallet, "nexum-commerce-agent", "testnet");
 
-        send({ type: "run_start", runId, agent: identity, timestamp: Date.now() });
+        // Resolve payment mode up front so every emitted step + the run_start
+        // event itself can advertise it. The dashboard reads agent.passport
+        // off the run_start event to render its mode banner.
+        const passportSession = activePassportSession();
+        const passport = getPassportClient();
+        const usingPassport = !!passportSession;
+
+        send({
+          type: "run_start", runId,
+          agent: {
+            ...identity,
+            ...(usingPassport && {
+              passport: {
+                sessionId: passportSession!.id,
+                budget: passportSession!.maxTotalAmount,
+                spent: passportSession!.totalSpent,
+                asset: passportSession!.asset,
+                expiresAt: passportSession!.expiresAt,
+              },
+            }),
+          },
+          timestamp: Date.now(),
+        });
 
         // Persist run to store immediately
         store.upsert({ id: runId, task, location, agentAddress: wallet.address, status: "running", startedAt: Date.now(), payments: [], attestations: [], totalSpend: "0", servicesUsed: [], stepsCount: 0 });
 
         // Step: Agent init
-        send({ type: "step_start", runId, step: { id: "agent_init", label: "AGENT INIT", description: "Bootstrapping Nexum agent on Kite chain...", status: "running" }, timestamp: Date.now() });
+        send({
+          type: "step_start", runId,
+          step: {
+            id: "agent_init", label: "AGENT INIT",
+            description: usingPassport
+              ? `Bootstrapping under Kite Passport session ${passportSession!.id.slice(0, 14)}…`
+              : "Bootstrapping Nexum agent on Kite chain...",
+            status: "running",
+          },
+          timestamp: Date.now(),
+        });
 
         const initAttest = await writeAttestation(wallet, {
           runId, type: "agent_init",
           contentHash: hashContent(task + runId),
-          metadata: `Task: ${task.slice(0, 80)}`,
+          metadata: usingPassport
+            ? `Passport ${passportSession!.id} · Task: ${task.slice(0, 60)}`
+            : `Task: ${task.slice(0, 80)}`,
         });
         attestations.push(initAttest);
 
@@ -134,9 +168,17 @@ export async function POST(req: NextRequest) {
           type: "step_complete", runId,
           step: {
             id: "agent_init", label: "AGENT INIT",
-            description: `Agent online · ${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)} · Kite Testnet`,
+            description: usingPassport
+              ? `Agent online · Passport AA wallet · ${passportSession!.totalSpent} of ${passportSession!.maxTotalAmount} session budget used`
+              : `Agent online · ${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)} · Kite Testnet`,
             status: "success", txHash: initAttest.txHash, explorerUrl: initAttest.explorerUrl,
-            data: { address: wallet.address, addressUrl: addressUrl(wallet.address), network: "kite-testnet" },
+            data: {
+              address: wallet.address,
+              addressUrl: addressUrl(wallet.address),
+              network: "kite-testnet",
+              paymentMode: usingPassport ? "passport" : "local",
+              ...(usingPassport && { sessionId: passportSession!.id }),
+            },
           },
           timestamp: Date.now(),
         });
@@ -154,23 +196,30 @@ export async function POST(req: NextRequest) {
             id: "discover", label: "SERVICE DISCOVERY",
             description: `${services.length} service${services.length !== 1 ? "s" : ""} matched: ${services.map((s) => s.name).join(" · ")}`,
             status: "success",
-            data: { services: services.map((s) => ({ id: s.id, name: s.name, price: s.priceDisplay })) },
+            data: {
+              services: services.map((s) => ({ id: s.id, name: s.name, price: s.priceDisplay })),
+              paymentMode: usingPassport ? "passport" : "local",
+            },
           },
           timestamp: Date.now(),
         });
 
         // ── x402 Payments ────────────────────────────────────────────────
-        const passportSession = activePassportSession();
-        const passport = getPassportClient();
-        const usingPassport = !!passportSession;
-
         if (usingPassport) {
+          // Already announced in run_start + agent_init; one-line confirmation
+          // step keeps the timeline visually balanced and explicit.
           send({
-            type: "step_update", runId,
+            type: "step_start", runId,
             step: {
-              id: "discover", label: "PASSPORT MODE",
-              description: `Active Kite Passport session ${passportSession!.id.slice(0, 14)}… (budget ${passportSession!.totalSpent} of ${passportSession!.maxTotalAmount})`,
-              status: "running",
+              id: "passport_mode", label: "PASSPORT MODE",
+              description: `Routing payments through Kite Passport · session ${passportSession!.id.slice(0, 14)}… (${passportSession!.totalSpent} of ${passportSession!.maxTotalAmount})`,
+              status: "success",
+              data: {
+                sessionId: passportSession!.id,
+                budget: passportSession!.maxTotalAmount,
+                spent: passportSession!.totalSpent,
+                asset: passportSession!.asset,
+              },
             },
             timestamp: Date.now(),
           });

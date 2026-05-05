@@ -30,6 +30,15 @@ export async function GET(req: NextRequest) {
     .filter((p) => Date.now() - p.timestamp < 86400000 * 30)
     .reduce((s, p) => s + parseFloat(p.amountDisplay?.split(" ")[0] ?? "0"), 0);
 
+  // Passport vs local origin breakdown
+  const passportPayments = payments.filter((p) => p.origin === "passport");
+  const passportSpend = passportPayments.reduce(
+    (s, p) => s + parseFloat(p.amountDisplay?.split(" ")[0] ?? "0"),
+    0
+  );
+  const localSpend = totalSpend - passportSpend;
+  const uniqueSessions = new Set(passportPayments.map((p) => p.sessionId).filter(Boolean)).size;
+
   return NextResponse.json({
     payments,
     summary: {
@@ -37,6 +46,13 @@ export async function GET(req: NextRequest) {
       spentToday: spentToday.toFixed(4),
       spentMonth: spentMonth.toFixed(4),
       count: payments.length,
+      origin: {
+        passportCount: passportPayments.length,
+        localCount: payments.length - passportPayments.length,
+        passportSpend: passportSpend.toFixed(4),
+        localSpend: localSpend.toFixed(4),
+        uniqueSessions,
+      },
     },
   });
 }

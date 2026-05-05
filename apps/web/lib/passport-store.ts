@@ -29,7 +29,7 @@ function init(): State {
   // mark the connection as "connected" optimistically. The /status route
   // will refresh from `me()` on first read.
   const hasKey = !!process.env.KITE_PASSPORT_API_KEY;
-  return {
+  const state: State = {
     connection: {
       status: hasKey ? "connected" : "disconnected",
     },
@@ -37,6 +37,34 @@ function init(): State {
     spent: new Map(),
     client,
   };
+
+  // Seed a demo session that matches the demo run in lib/store.ts so
+  // the /history badge → run detail → /agent navigation tells one
+  // coherent story on first load. This only seeds when no real Passport
+  // key is configured (i.e. we're in simulate mode).
+  if (!hasKey) {
+    const now = Date.now();
+    const demoSession: PassportSession = {
+      id: "sess_demo_singapore_b2b",
+      agentId: "agent_demo_nexum",
+      taskSummary: "Cross-border B2B payments with KYC verification",
+      maxAmountPerTx: "5.00 USDC",
+      maxTotalAmount: "10.00 USDC",
+      totalSpent: "2.50 USDC",
+      asset: "USDC",
+      paymentApproach: "x402_http",
+      ttlSeconds: 86400,
+      expiresAt: now + 22 * 3600 * 1000, // 22h remaining
+      status: "active",
+      callCount: 1,
+      createdAt: now - 2 * 3600 * 1000,
+      approvedAt: now - 2 * 3600 * 1000 + 8000,
+    };
+    state.sessions.set(demoSession.id, demoSession);
+    state.spent.set(demoSession.id, 2.5);
+  }
+
+  return state;
 }
 
 if (!g.__nexumPassportState) {

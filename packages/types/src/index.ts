@@ -11,6 +11,18 @@ export interface AgentIdentity {
   address: string; // EVM wallet address on Kite chain
   network: "kite-testnet" | "kite-mainnet";
   createdAt: number;
+  /** Present when the run is paying via a Kite Passport session.
+   *  When absent, payments go through the local x402 driver. */
+  passport?: {
+    sessionId: string;
+    /** Display string, e.g. "10.00 USDC" */
+    budget: string;
+    /** Display string, e.g. "2.50 USDC" */
+    spent: string;
+    asset: string;
+    /** Unix ms timestamp when the session expires */
+    expiresAt: number;
+  };
 }
 
 // ── Service Registry ──────────────────────────────────────────────────────────

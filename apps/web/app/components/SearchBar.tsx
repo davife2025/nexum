@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 interface SearchResult {
-  type: "run" | "payment" | "attestation";
+  type: "run" | "payment" | "attestation" | "session";
   id: string;
   title: string;
   subtitle: string;
@@ -12,10 +12,10 @@ interface SearchResult {
 }
 
 const TYPE_ICONS: Record<string, string> = {
-  run: "◎", payment: "⚡", attestation: "⛓",
+  run: "◎", payment: "⚡", attestation: "⛓", session: "⛨",
 };
 const TYPE_COLORS: Record<string, string> = {
-  run: "#00E5C9", payment: "#FFB300", attestation: "#7B5EFF",
+  run: "#00E5C9", payment: "#FFB300", attestation: "#7B5EFF", session: "#00E5C9",
 };
 
 export default function SearchBar() {
@@ -139,10 +139,10 @@ export default function SearchBar() {
               </div>
               {results.length > 0 && (
                 <div style={{ display:"flex", gap:8 }}>
-                  {(["run","payment","attestation"] as const).map(type => {
+                  {(["run","payment","attestation","session"] as const).map(type => {
                     const count = results.filter(r => r.type === type).length;
                     if (!count) return null;
-                    const colors: Record<string,string> = { run:"#00E5C9", payment:"#FFB300", attestation:"#7B5EFF" };
+                    const colors: Record<string,string> = { run:"#00E5C9", payment:"#FFB300", attestation:"#7B5EFF", session:"#00E5C9" };
                     return <span key={type} style={{ fontSize:10, ...mono, color:colors[type] }}>{count} {type}{count!==1?"s":""}</span>;
                   })}
                 </div>

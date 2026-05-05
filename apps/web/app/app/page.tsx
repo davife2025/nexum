@@ -27,6 +27,14 @@ interface RunState {
   startedAt: number;
   completedAt?: number;
   durationMs?: number;
+  /** Set when the run is paying via Kite Passport. */
+  passport?: {
+    sessionId: string;
+    budget: string;
+    spent: string;
+    asset: string;
+    expiresAt: number;
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -171,10 +179,12 @@ function NexumDashboardInner() {
       const spendStr = meta?.totalSpend ? ` · ${meta.totalSpend}` : "";
       const paymentsCount = Number(meta?.paymentsCount ?? 0);
       const attestationsCount = Number(meta?.attestationsCount ?? 0);
+      const mode = typeof meta?.paymentMode === "string" ? meta.paymentMode : null;
+      const modeStr = mode === "passport" ? " · via Kite Passport" : mode === "local" ? " · local wallet" : "";
       toastRef.current({
         kind: "success",
-        title: "Run complete",
-        body: `${paymentsCount} payment${paymentsCount !== 1 ? "s" : ""}${spendStr} · ${attestationsCount} attestations`,
+        title: mode === "passport" ? "Run complete · Passport" : "Run complete",
+        body: `${paymentsCount} payment${paymentsCount !== 1 ? "s" : ""}${spendStr} · ${attestationsCount} attestations${modeStr}`,
         href: typeof meta?.attestationUrl === "string" ? meta.attestationUrl : undefined,
         duration: 7000,
       });
@@ -183,14 +193,27 @@ function NexumDashboardInner() {
       toastRef.current({ kind: "error", title: "Agent error", body: (event.error ?? "Unknown error").slice(0, 80), duration: 6000 });
     }
     if (event.type === "payment_complete" && event.payment) {
-      toastRef.current({ kind: "payment", title: `Paid ${event.payment.amountDisplay}`, body: event.payment.serviceName, duration: 4000 });
+      const isPassport = event.payment.origin === "passport";
+      toastRef.current({
+        kind: "payment",
+        title: isPassport ? `⛨ ${event.payment.amountDisplay} (Passport)` : `Paid ${event.payment.amountDisplay}`,
+        body: event.payment.serviceName,
+        duration: 4000,
+      });
     }
 
     setRun((prev) => {
       if (!prev) return prev;
       switch (event.type) {
         case "run_start":
-          return { ...prev, runId: event.runId, agentAddress: event.agent?.address ?? "" };
+          return {
+            ...prev,
+            runId: event.runId,
+            agentAddress: event.agent?.address ?? "",
+            // event.agent.passport exists when route.ts sets it after detecting
+            // an active Passport session.
+            passport: (event.agent as { passport?: RunState["passport"] })?.passport,
+          };
         case "step_start":
         case "step_update":
           if (!event.step?.id) return prev;
@@ -475,6 +498,53 @@ function NexumDashboardInner() {
             ) : (
               /* Active run */
               <div className="nx-panel overflow-hidden">
+                {/* Passport mode banner — only when this run is paying via Passport. */}
+                {run.passport && (() => {
+                  const budgetNum = parseFloat(run.passport.budget.split(" ")[0] ?? "0");
+                  const spentNum = parseFloat(run.passport.spent.split(" ")[0] ?? "0");
+                  const pct = budgetNum > 0 ? Math.min(100, (spentNum / budgetNum) * 100) : 0;
+                  const ttlMs = run.passport.expiresAt - Date.now();
+                  const ttlHr = Math.max(0, Math.floor(ttlMs / 3600000));
+                  const ttlMin = Math.max(0, Math.floor((ttlMs % 3600000) / 60000));
+                  return (
+                    <div style={{
+                      borderBottom: "1px solid rgba(0,229,201,0.25)",
+                      background: "linear-gradient(90deg, rgba(0,229,201,0.10) 0%, rgba(0,229,201,0.02) 100%)",
+                      padding: "10px 16px",
+                    }}>
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span style={{ color: "#00E5C9", fontSize: 14 }}>⛨</span>
+                          <span className="text-xs font-mono tracking-wider" style={{ color: "#00E5C9" }}>
+                            KITE PASSPORT
+                          </span>
+                          <span className="text-xs font-mono truncate" style={{ color: "#4A7090" }}>
+                            session {run.passport.sessionId.slice(0, 14)}…
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs font-mono" style={{ color: "#B8D4E8" }}>
+                          <span>
+                            <span style={{ color: "#4A7090" }}>BUDGET: </span>
+                            {run.passport.spent} / {run.passport.budget}
+                          </span>
+                          <span>
+                            <span style={{ color: "#4A7090" }}>EXPIRES: </span>
+                            {ttlHr > 0 ? `${ttlHr}h ${ttlMin}m` : ttlMs > 0 ? `${ttlMin}m` : "expired"}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Budget progress bar */}
+                      <div style={{ height: 3, background: "rgba(0,229,201,0.10)", borderRadius: 2, marginTop: 8, overflow: "hidden" }}>
+                        <div style={{
+                          width: `${pct}%`,
+                          height: "100%",
+                          background: pct > 80 ? "#FB923C" : "#00E5C9",
+                          transition: "width 300ms ease",
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })()}
                 {/* Tabs */}
                 <div className="flex border-b border-[#1E3A5F]">
                   {(["trace", "payments", "services", "report"] as const).map((tab) => (

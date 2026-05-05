@@ -27,11 +27,36 @@ function timeAgo(ts: number) {
 }
 function shortHash(h: string) { return `${h.slice(0,12)}…${h.slice(-8)}`; }
 
+/**
+ * Detect whether an attestation belongs to a Passport-mediated run.
+ *
+ * The agent route writes Passport context into the attestation metadata
+ * in two known shapes:
+ *   - "Passport sess_xxx · Task: ..."          (agent_init)
+ *   - "Passport 2.50 USDC → Service Name"      (payment)
+ *   - "Mode: passport · Services: 2 · Task: …"  (task_complete)
+ *
+ * If any of those substrings are present, the attestation came from a
+ * Passport run.
+ */
+function isPassportAttestation(metadata?: string): boolean {
+  if (!metadata) return false;
+  const m = metadata.toLowerCase();
+  return m.startsWith("passport ") || m.includes("mode: passport");
+}
+
+function extractSessionId(metadata?: string): string | null {
+  if (!metadata) return null;
+  const match = metadata.match(/sess[_a-z0-9-]+/i);
+  return match ? match[0] : null;
+}
+
 export default function AttestationsPage() {
   const [attestations, setAttestations] = useState<Attestation[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [filter, setFilter] = useState("all");
   const [runFilter, setRunFilter] = useState<string | null>(null);
+  const [passportOnly, setPassportOnly] = useState(false);
   const [selected, setSelected] = useState<Attestation | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -57,9 +82,15 @@ export default function AttestationsPage() {
   const [loading, setLoading] = useState(true);
 
   // Client-side run filter on top of server-side type filter
-  const displayAttestations = runFilter
+  let displayAttestations = runFilter
     ? attestations.filter(a => a.runId === runFilter)
     : attestations;
+  if (passportOnly) {
+    displayAttestations = displayAttestations.filter(a => isPassportAttestation(a.metadata));
+  }
+
+  // Count Passport attestations for the toggle's badge
+  const passportCount = attestations.filter(a => isPassportAttestation(a.metadata)).length;
 
   const load = useCallback(async () => {
     try {
@@ -124,7 +155,7 @@ export default function AttestationsPage() {
         )}
 
         {/* Filter pills */}
-        <div style={{ display:"flex", gap:6, marginBottom:18, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:6, marginBottom:18, flexWrap:"wrap", alignItems:"center" }}>
           {types.map(t => {
             const meta = TYPE_META[t];
             const active = filter === t;
@@ -136,6 +167,25 @@ export default function AttestationsPage() {
               </button>
             );
           })}
+          {/* Passport-only toggle. Renders only if there are passport attestations
+              available, so the chrome stays out of the way for users who haven't
+              touched Passport yet. */}
+          {passportCount > 0 && (
+            <>
+              <span style={{ fontSize:11, ...S.mono, color:"#4A7090", margin:"0 6px" }}>·</span>
+              <button onClick={() => setPassportOnly(v => !v)}
+                title={passportOnly ? "Showing only Passport-mediated attestations" : "Show only Passport-mediated attestations"}
+                style={{
+                  fontSize:11, ...S.mono, padding:"5px 14px", borderRadius:6,
+                  border:`1px solid ${passportOnly?"rgba(0,229,201,0.6)":"#1E3A5F"}`,
+                  color:passportOnly?"#00E5C9":"#4A7090",
+                  background:passportOnly?"rgba(0,229,201,0.10)":"transparent",
+                  cursor:"pointer",
+                }}>
+                ⛨ Passport only ({passportCount})
+              </button>
+            </>
+          )}
         </div>
 
         {/* Layout */}
@@ -180,7 +230,15 @@ export default function AttestationsPage() {
                     onMouseLeave={e=>{ if(!isSelected) e.currentTarget.style.background="transparent"; }}>
                     <div style={{ padding:"12px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:meta.color }}>{meta.icon}</div>
                     <div style={{ padding:"10px 12px", minWidth:0 }}>
-                      <div style={{ fontSize:12, fontWeight:500, color:meta.color, marginBottom:2 }}>{meta.label}</div>
+                      <div style={{ fontSize:12, fontWeight:500, color:meta.color, marginBottom:2, display:"flex", alignItems:"center", gap:6 }}>
+                        <span>{meta.label}</span>
+                        {isPassportAttestation(a.metadata) && (
+                          <span title="Mediated by Kite Passport"
+                            style={{ fontSize:9, ...S.mono, color:"#00E5C9", padding:"1px 5px", border:"1px solid rgba(0,229,201,0.35)", borderRadius:3, background:"rgba(0,229,201,0.06)", letterSpacing:".05em" }}>
+                            ⛨ PASSPORT
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize:11, ...S.mono, color:"#4A7090", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.metadata ?? a.runId}</div>
                     </div>
                     <div style={{ padding:"10px 12px", alignSelf:"center" }}>
@@ -226,6 +284,23 @@ export default function AttestationsPage() {
                   </span>
                 </div>
                 <div style={{ display:"grid", gap:8, marginBottom:16 }}>
+                  {/* Passport session — only when this attestation came from a Passport run */}
+                  {(() => {
+                    const sid = extractSessionId(selected.metadata);
+                    if (!sid) return null;
+                    return (
+                      <div style={{ background:"rgba(0,229,201,0.04)", border:"1px solid rgba(0,229,201,0.25)", borderRadius:6, padding:"8px 12px" }}>
+                        <div style={{ fontSize:10, ...S.mono, color:"#00E5C9", marginBottom:2, letterSpacing:".05em" }}>⛨ KITE PASSPORT SESSION</div>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <div style={{ fontSize:11, ...S.mono, color:"#B8D4E8", wordBreak:"break-all", flex:1 }}>{sid}</div>
+                          <button onClick={() => copyHash(sid, `session-${selected.id}`)}
+                            style={{ fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:copied===`session-${selected.id}`?"#00E5C9":"#4A7090", background:"transparent", border:"1px solid rgba(0,229,201,0.25)", borderRadius:3, padding:"1px 5px", cursor:"pointer", flexShrink:0 }}>
+                            {copied===`session-${selected.id}`?"✓":"⎘"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {[["RUN ID", selected.runId],["ATTESTATION ID", selected.id],["CONTENT HASH", selected.contentHash]].map(([label,value]) => (
                     <div key={label} style={{ background:"#0F172A", border:"1px solid #1E3A5F", borderRadius:6, padding:"8px 12px" }}>
                       <div style={{ fontSize:10, ...S.mono, color:"#4A7090", marginBottom:2 }}>{label}</div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { store } from "../../../lib/store";
+import { listSessions } from "../../../lib/passport-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,13 +25,36 @@ export async function GET(req: NextRequest) {
 
   const runs = store.recent(200);
   const results: Array<{
-    type: "run" | "payment" | "attestation";
+    type: "run" | "payment" | "attestation" | "session";
     id: string;
     title: string;
     subtitle: string;
     href: string;
     meta?: string;
   }> = [];
+
+  // ── Passport sessions ─────────────────────────────────────────────────────
+  // Searchable by id, agentId, task summary, or status keyword.
+  // Also surfaces all sessions when q matches "passport" or "session".
+  const isMetaQuery = q === "passport" || q === "session" || q === "sessions" || q === "kite passport";
+  for (const s of listSessions()) {
+    const matches =
+      isMetaQuery ||
+      s.id.toLowerCase().includes(q) ||
+      s.agentId.toLowerCase().includes(q) ||
+      s.taskSummary.toLowerCase().includes(q) ||
+      s.status.toLowerCase().includes(q);
+    if (matches) {
+      results.push({
+        type: "session",
+        id: s.id,
+        title: `⛨ Passport session — ${s.taskSummary.slice(0, 60)}`,
+        subtitle: `${s.status} · ${s.totalSpent} of ${s.maxTotalAmount} · ${s.callCount} call${s.callCount !== 1 ? "s" : ""}`,
+        href: "/agent",
+        meta: s.id.slice(-14),
+      });
+    }
+  }
 
   for (const run of runs) {
     // Match run task, id, location, or result snippet
@@ -50,18 +74,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Match payments
+    // Match payments — including origin and sessionId
     for (const p of run.payments) {
       if (
         p.serviceName.toLowerCase().includes(q) ||
         p.serviceId.toLowerCase().includes(q) ||
-        (p.txHash && p.txHash.toLowerCase().includes(q))
+        (p.txHash && p.txHash.toLowerCase().includes(q)) ||
+        (p.origin && p.origin.toLowerCase().includes(q)) ||
+        (p.sessionId && p.sessionId.toLowerCase().includes(q))
       ) {
+        const originBadge = p.origin === "passport" ? "⛨ " : "";
         results.push({
           type: "payment",
           id: p.id,
-          title: `${p.serviceName} — ${p.amountDisplay}`,
-          subtitle: `Run ${run.id.slice(-10)} · ${p.status}`,
+          title: `${originBadge}${p.serviceName} — ${p.amountDisplay}`,
+          subtitle: `Run ${run.id.slice(-10)} · ${p.status}${p.sessionId ? ` · session ${p.sessionId.slice(-10)}` : ""}`,
           href: `/app/runs/${run.id}`,
           meta: p.txHash ? `${p.txHash.slice(0, 12)}…` : undefined,
         });

@@ -21,12 +21,15 @@ export async function GET() {
       txHash: p.txHash ?? "",
       explorerUrl: p.explorerUrl ?? "",
       agentAddress: r.agentAddress,
+      origin: p.origin ?? "local",
+      sessionId: p.sessionId ?? "",
     }))
   );
 
   const headers = [
     "date", "runId", "task", "location", "service", "serviceId", "category",
     "amount", "token", "payTo", "status", "txHash", "explorerUrl", "agentAddress",
+    "origin", "sessionId",
   ];
 
   const rows = payments.map((p) => {

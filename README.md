@@ -11,7 +11,7 @@
 
 *Give an agent a task. It buys what it needs. Every payment settles on-chain. No humans required.*
 
-[Live Demo](https://nexum.vercel.app) · [KiteScan Explorer](https://testnet.kitescan.ai) · [Kite Faucet](https://faucet.gokite.ai)
+[Live Demo](https://nexum-web-nine.vercel.app) · [KiteScan Explorer](https://testnet.kitescan.ai) · [Kite Faucet](https://faucet.gokite.ai)
 
 </div>
 
@@ -29,14 +29,6 @@ Nexum is a fully autonomous AI commerce agent built on [Kite](https://gokite.ai)
 6. **Anchors** cryptographic attestations on-chain — task start, every payment, and completion hash
 
 Every run produces a KiteScan link: immutable, verifiable proof that the agent purchased real services and settled real payments.
-
----
-
-## Screenshots
-
-| Dashboard | Live Run | History |
-|-----------|----------|---------|
-| ![Dashboard](docs/dashboard.png) | ![Run](docs/run.png) | ![History](docs/history.png) |
 
 ---
 

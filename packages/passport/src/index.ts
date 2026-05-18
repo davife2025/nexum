@@ -25,6 +25,7 @@ import type {
   SessionStatus,
   PaymentApproach,
 } from "@nexum/types";
+import "dotenv";
 
 export type {
   KitePassport,
@@ -464,10 +465,16 @@ export class PassportClient {
 
 // ── Errors ───────────────────────────────────────────────────────────────────
 
+// ✅ Fixed: parameter property rewritten as explicit declaration.
+// Node 24's strip-only TypeScript mode cannot transform parameter properties
+// (public/private/protected/readonly in constructor args) — only tsc/tsx can.
 export class PassportError extends Error {
-  constructor(message: string, public readonly status?: number) {
+  public readonly status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "PassportError";
+    this.status = status;
   }
 }
 
